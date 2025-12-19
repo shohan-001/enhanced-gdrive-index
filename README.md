@@ -147,23 +147,6 @@ See [CONFIGURATION.md](CONFIGURATION.md) for detailed setup instructions includi
 
 ---
 
-## 📸 Adding Screenshots
-
-1. Create a `screenshots/` folder in your repository
-2. Take screenshots of each feature:
-   - `homepage.png` - Main page with drive cards
-   - `login_page.png` - Login/signup page
-   - `admin_dashboard.png` - Admin panel dashboard
-   - `admin_users.png` - User management
-   - `admin_logs.png` - Activity logs
-   - `file_browser.png` - File/folder view
-   - `video_player.png` - Media player
-   - `search_results.png` - Search results
-
-3. Commit and push to GitHub
-
----
-
 ## 🗺️ Roadmap
 
 Planned features for future releases:
