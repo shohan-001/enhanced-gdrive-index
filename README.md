@@ -164,6 +164,46 @@ See [CONFIGURATION.md](CONFIGURATION.md) for detailed setup instructions includi
 
 ---
 
+## 🗺️ Roadmap
+
+Planned features for future releases:
+
+### 🔐 Authentication & Security
+- [ ] Two-Factor Authentication (2FA)
+- [ ] Password reset via email
+- [ ] OAuth login (Google/GitHub)
+- [ ] Rate limiting for brute force protection
+- [ ] Session history for users
+
+### 📊 Admin Panel Improvements
+- [ ] Analytics dashboard with charts
+- [ ] User activity graphs
+- [ ] Export logs as CSV/JSON
+- [ ] Bulk user actions
+- [ ] Email notifications on new signups
+
+### 📁 File Management
+- [ ] File upload to Google Drive
+- [ ] Create folders from UI
+- [ ] Shareable links with expiry
+- [ ] Favorites/Bookmarks
+- [ ] Recent files history
+
+### 🎨 UI/UX Enhancements
+- [ ] Light/Dark theme toggle
+- [ ] Custom color themes
+- [ ] Grid/List view toggle
+- [ ] Keyboard shortcuts
+- [ ] Drag & drop upload
+
+### 🔧 Technical
+- [ ] Cloudflare R2 caching
+- [ ] Image/video thumbnails
+- [ ] More file type previews
+- [ ] REST API endpoints
+
+---
+
 ## 🙏 Credits
 
 - Original Project: [Google Drive Index](https://gitlab.com/GoogleDriveIndex/Google-Drive-Index) by Parveen Bhadoo
