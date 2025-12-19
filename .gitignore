@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build
+dist/
+build/
+
+# Wrangler
+.wrangler/
+
+# Private configuration (your actual worker.js with real credentials)
+worker.js
