@@ -5274,8 +5274,13 @@ const directlink = `
   </html>
   `
 
-function login() {
-    return new Response(login_html, {
+function login(returnUrl = '/') {
+    // Inject the returnUrl into the login HTML
+    const loginHtmlWithReturn = login_html.replace(
+        "window.location.replace('/');",
+        `window.location.replace('${returnUrl}');`
+    );
+    return new Response(loginHtmlWithReturn, {
         status: 401,
         headers: {
             'Content-Type': 'text/html; charset=utf-8'
@@ -5313,7 +5318,7 @@ async function handleRequest(request, event) {
 
     // --- NEW ADMIN PANEL ROUTES ---
     if (path === '/admin') {
-        if (!isAuthenticated) return login();
+        if (!isAuthenticated) return login('/admin');
         if (!isAdministrator) return new Response('Access Denied: You are not an administrator.', { status: 403 });
 
         // NEW: Log successful admin panel access
@@ -5487,7 +5492,9 @@ async function handleRequest(request, event) {
             });
         } else if (request.method === 'GET') {
             if (user_session_data.requiresLogin) {
-                return login();
+                // Pass the current URL so user can be redirected back after login
+                const returnUrl = url.pathname + url.search;
+                return login(returnUrl);
             }
             // If isAuthenticated is true, proceed to normal worker logic
         }
@@ -5728,7 +5735,7 @@ async function handleRequest(request, event) {
         const file = await gd.get_single_file(path.slice(3));
         let range = request.headers.get('Range');
         const inline = 'true' === url.searchParams.get('inline');
-        if (gd.root.protect_file_link && authConfig.enable_login) return login();
+        if (gd.root.protect_file_link && authConfig.enable_login) return login(path);
         return download(file.id, range, inline);
 
     }
