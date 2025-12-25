@@ -166,7 +166,7 @@ Planned features for future releases:
 - [ ] Email notifications on new signups
 
 ### 📁 File Management
-- [ ] File upload to Google Drive
+- [x] File upload to Google Drive
 - [ ] Create folders from UI
 - [ ] Shareable links with expiry
 - [ ] Favorites/Bookmarks
@@ -177,7 +177,7 @@ Planned features for future releases:
 - [ ] Custom color themes
 - [ ] Grid/List view toggle
 - [ ] Keyboard shortcuts
-- [ ] Drag & drop upload
+- [x] Drag & drop upload
 
 ### 🔧 Technical
 - [ ] Cloudflare R2 caching
