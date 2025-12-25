@@ -46,6 +46,10 @@ const authConfig = {
     "single_session": false, // set to true if you want to allow only one session per user
     "ip_changed_action": false, // set to true if you want to logout user if IP changed
 
+    // --- UPLOAD CONFIGURATION ---
+    "enable_upload": true, // Enable file upload feature
+    "upload_folder_id": "1j1BcWiDrMvjrKedF3bB5QgggHzCtpKpi", // Folder ID where files will be uploaded
+
     // --- Add folder IDs here to exclude them from search results ---
     "excluded_from_search": [
         // "FOLDER_ID_TO_EXCLUDE" // Example: This will hide folders from search
@@ -1167,6 +1171,568 @@ function html(current_drive_order = 0, model = {}) {
   <div class="content-wrapper">
     <div id="app-content"></div>
   </div>
+
+  <!-- Upload Button (Floating) -->
+  ${authConfig.enable_upload ? `
+  <button id="upload-fab" class="upload-fab" onclick="openUploadModal()" title="Upload File">
+    <i class="bi bi-cloud-arrow-up-fill"></i>
+  </button>
+  ` : ''}
+
+  <!-- Upload Modal -->
+  <div id="upload-modal" class="upload-modal" onclick="if(event.target===this)closeUploadModal()">
+    <div class="upload-modal-content">
+      <div class="upload-modal-header">
+        <h3><i class="bi bi-cloud-arrow-up-fill"></i> Upload File</h3>
+        <button class="upload-close-btn" onclick="closeUploadModal()">&times;</button>
+      </div>
+      <div class="upload-modal-body">
+        <div id="upload-dropzone" class="upload-dropzone" 
+             ondrop="handleDrop(event)" 
+             ondragover="handleDragOver(event)" 
+             ondragleave="handleDragLeave(event)">
+          <div class="upload-dropzone-content">
+            <i class="bi bi-cloud-arrow-up upload-icon"></i>
+            <p class="upload-text">Drag & drop your file here</p>
+            <p class="upload-subtext">or</p>
+            <label class="upload-browse-btn">
+              <input type="file" id="file-input" onchange="handleFileSelect(event)" hidden>
+              Browse Files
+            </label>
+          </div>
+        </div>
+        
+        <div id="upload-file-info" class="upload-file-info" style="display:none;">
+          <div class="file-info-card">
+            <i class="bi bi-file-earmark file-icon"></i>
+            <div class="file-details">
+              <p id="upload-filename" class="filename"></p>
+              <p id="upload-filesize" class="filesize"></p>
+            </div>
+            <button class="remove-file-btn" onclick="removeSelectedFile()">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+        </div>
+        
+        <div id="upload-progress-container" class="upload-progress-container" style="display:none;">
+          <div class="progress-header">
+            <span id="upload-status">Uploading...</span>
+            <span id="upload-percentage">0%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div id="upload-progress-bar" class="progress-bar-fill"></div>
+          </div>
+          <p id="upload-speed" class="upload-speed"></p>
+        </div>
+        
+        <div id="upload-result" class="upload-result" style="display:none;"></div>
+      </div>
+      <div class="upload-modal-footer">
+        <button id="upload-btn" class="upload-submit-btn" onclick="startUpload()" disabled>
+          <i class="bi bi-cloud-arrow-up-fill"></i> Upload
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* Upload FAB Button */
+    .upload-fab {
+      position: fixed;
+      bottom: 100px;
+      right: 30px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%);
+      border: none;
+      color: white;
+      font-size: 1.5rem;
+      cursor: pointer;
+      box-shadow: 0 8px 32px rgba(55, 168, 110, 0.4);
+      z-index: 1000;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .upload-fab:hover {
+      transform: translateY(-5px) scale(1.1);
+      box-shadow: 0 12px 40px rgba(55, 168, 110, 0.6);
+    }
+    
+    .upload-fab:active {
+      transform: translateY(-2px) scale(1.05);
+    }
+
+    /* Upload Modal */
+    .upload-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(13, 31, 35, 0.9);
+      backdrop-filter: blur(10px);
+      z-index: 2000;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .upload-modal.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
+    }
+    
+    .upload-modal-content {
+      background: rgba(19, 46, 53, 0.95);
+      border: 1px solid rgba(105, 129, 141, 0.3);
+      border-radius: 20px;
+      width: 90%;
+      max-width: 500px;
+      backdrop-filter: blur(30px);
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
+      transform: translateY(20px) scale(0.95);
+      transition: all 0.3s ease;
+      animation: modalSlideIn 0.3s ease forwards;
+    }
+    
+    @keyframes modalSlideIn {
+      to {
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    .upload-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem;
+      border-bottom: 1px solid rgba(105, 129, 141, 0.2);
+    }
+    
+    .upload-modal-header h3 {
+      margin: 0;
+      color: var(--text-primary);
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .upload-modal-header h3 i {
+      color: #37a86e;
+    }
+    
+    .upload-close-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 1.5rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .upload-close-btn:hover {
+      background: rgba(255, 107, 107, 0.2);
+      color: #ff6b6b;
+    }
+    
+    .upload-modal-body {
+      padding: 1.5rem;
+    }
+    
+    /* Dropzone */
+    .upload-dropzone {
+      border: 2px dashed rgba(105, 129, 141, 0.4);
+      border-radius: 16px;
+      padding: 3rem 2rem;
+      text-align: center;
+      transition: all 0.3s ease;
+      background: rgba(13, 31, 35, 0.5);
+      cursor: pointer;
+    }
+    
+    .upload-dropzone:hover,
+    .upload-dropzone.drag-over {
+      border-color: #37a86e;
+      background: rgba(55, 168, 110, 0.1);
+    }
+    
+    .upload-dropzone.drag-over {
+      transform: scale(1.02);
+    }
+    
+    .upload-icon {
+      font-size: 4rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      transition: all 0.3s ease;
+    }
+    
+    .upload-dropzone:hover .upload-icon,
+    .upload-dropzone.drag-over .upload-icon {
+      color: #37a86e;
+      transform: translateY(-5px);
+    }
+    
+    .upload-text {
+      color: var(--text-primary);
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .upload-subtext {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+    
+    .upload-browse-btn {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(135deg, var(--accent-main), var(--accent-light));
+      color: white;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 600;
+    }
+    
+    .upload-browse-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(45, 74, 83, 0.4);
+    }
+    
+    /* File Info */
+    .upload-file-info {
+      margin-top: 1rem;
+    }
+    
+    .file-info-card {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      background: rgba(55, 168, 110, 0.1);
+      border: 1px solid rgba(55, 168, 110, 0.3);
+      border-radius: 12px;
+    }
+    
+    .file-icon {
+      font-size: 2rem;
+      color: #37a86e;
+    }
+    
+    .file-details {
+      flex: 1;
+    }
+    
+    .filename {
+      color: var(--text-primary);
+      font-weight: 600;
+      margin: 0;
+      word-break: break-all;
+    }
+    
+    .filesize {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      margin: 0.25rem 0 0 0;
+    }
+    
+    .remove-file-btn {
+      background: rgba(255, 107, 107, 0.2);
+      border: none;
+      color: #ff6b6b;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .remove-file-btn:hover {
+      background: rgba(255, 107, 107, 0.4);
+      transform: scale(1.1);
+    }
+    
+    /* Progress Bar */
+    .upload-progress-container {
+      margin-top: 1rem;
+    }
+    
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    
+    .progress-bar-bg {
+      height: 10px;
+      background: rgba(105, 129, 141, 0.2);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #37a86e, #69818D);
+      border-radius: 5px;
+      transition: width 0.3s ease;
+    }
+    
+    .upload-speed {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      text-align: center;
+    }
+    
+    /* Result */
+    .upload-result {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 12px;
+      text-align: center;
+    }
+    
+    .upload-result.success {
+      background: rgba(55, 168, 110, 0.2);
+      border: 1px solid rgba(55, 168, 110, 0.4);
+      color: #37a86e;
+    }
+    
+    .upload-result.error {
+      background: rgba(255, 107, 107, 0.2);
+      border: 1px solid rgba(255, 107, 107, 0.4);
+      color: #ff6b6b;
+    }
+    
+    /* Footer */
+    .upload-modal-footer {
+      padding: 1rem 1.5rem 1.5rem;
+    }
+    
+    .upload-submit-btn {
+      width: 100%;
+      padding: 1rem;
+      background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    
+    .upload-submit-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(55, 168, 110, 0.4);
+    }
+    
+    .upload-submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .upload-fab {
+        bottom: 140px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        font-size: 1.2rem;
+      }
+      
+      .upload-modal-content {
+        width: 95%;
+        margin: 1rem;
+      }
+      
+      .upload-dropzone {
+        padding: 2rem 1rem;
+      }
+      
+      .upload-icon {
+        font-size: 3rem;
+      }
+    }
+  </style>
+
+  <script>
+    // Upload functionality
+    let selectedFile = null;
+    
+    function openUploadModal() {
+      const modal = document.getElementById('upload-modal');
+      modal.style.display = 'flex';
+      setTimeout(() => modal.classList.add('show'), 10);
+    }
+    
+    function closeUploadModal() {
+      const modal = document.getElementById('upload-modal');
+      modal.classList.remove('show');
+      setTimeout(() => {
+        modal.style.display = 'none';
+        resetUploadForm();
+      }, 300);
+    }
+    
+    function resetUploadForm() {
+      selectedFile = null;
+      document.getElementById('file-input').value = '';
+      document.getElementById('upload-dropzone').style.display = 'block';
+      document.getElementById('upload-file-info').style.display = 'none';
+      document.getElementById('upload-progress-container').style.display = 'none';
+      document.getElementById('upload-result').style.display = 'none';
+      document.getElementById('upload-btn').disabled = true;
+    }
+    
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('upload-dropzone').classList.add('drag-over');
+    }
+    
+    function handleDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('upload-dropzone').classList.remove('drag-over');
+    }
+    
+    function handleDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('upload-dropzone').classList.remove('drag-over');
+      
+      if (e.dataTransfer.files.length > 0) {
+        selectFile(e.dataTransfer.files[0]);
+      }
+    }
+    
+    function handleFileSelect(e) {
+      if (e.target.files.length > 0) {
+        selectFile(e.target.files[0]);
+      }
+    }
+    
+    function selectFile(file) {
+      selectedFile = file;
+      
+      document.getElementById('upload-dropzone').style.display = 'none';
+      document.getElementById('upload-file-info').style.display = 'block';
+      document.getElementById('upload-filename').textContent = file.name;
+      document.getElementById('upload-filesize').textContent = formatFileSize(file.size);
+      document.getElementById('upload-btn').disabled = false;
+      document.getElementById('upload-result').style.display = 'none';
+    }
+    
+    function removeSelectedFile() {
+      resetUploadForm();
+      document.getElementById('upload-dropzone').style.display = 'block';
+    }
+    
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    async function startUpload() {
+      if (!selectedFile) return;
+      
+      const uploadBtn = document.getElementById('upload-btn');
+      const progressContainer = document.getElementById('upload-progress-container');
+      const progressBar = document.getElementById('upload-progress-bar');
+      const percentage = document.getElementById('upload-percentage');
+      const status = document.getElementById('upload-status');
+      const speed = document.getElementById('upload-speed');
+      const result = document.getElementById('upload-result');
+      
+      uploadBtn.disabled = true;
+      uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+      progressContainer.style.display = 'block';
+      result.style.display = 'none';
+      status.textContent = 'Uploading to server...';
+      
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      
+      const xhr = new XMLHttpRequest();
+      const startTime = Date.now();
+      
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          progressBar.style.width = progress + '%';
+          percentage.textContent = progress + '%';
+          const elapsed = (Date.now() - startTime) / 1000;
+          if (elapsed > 0) { speed.textContent = formatFileSize(e.loaded / elapsed) + '/s'; }
+        }
+      });
+      
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const response = JSON.parse(xhr.responseText);
+          if (response.success) {
+            status.textContent = 'Complete!';
+            progressBar.style.width = '100%';
+            percentage.textContent = '100%';
+            result.style.display = 'block';
+            result.className = 'upload-result success';
+            result.innerHTML = '<i class="bi bi-check-circle-fill"></i> Thank you for uploading! <br><small>Your file is now available in the <a href="/0:/User_Uploads/" style="color: #37a86e; font-weight: 600;">📁 User Uploads</a> folder.</small>';
+            uploadBtn.innerHTML = '<i class="bi bi-check-lg"></i> Done';
+            setTimeout(() => { resetUploadForm(); closeUploadModal(); }, 4000);
+          } else {
+            result.style.display = 'block';
+            result.className = 'upload-result error';
+            result.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + (response.error || 'Upload failed');
+            uploadBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
+            uploadBtn.disabled = false;
+          }
+        } else {
+          result.style.display = 'block';
+          result.className = 'upload-result error';
+          result.innerHTML = '<i class="bi bi-x-circle-fill"></i> Upload failed: ' + xhr.status;
+          uploadBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
+          uploadBtn.disabled = false;
+        }
+      });
+      
+      xhr.addEventListener('error', () => {
+        result.style.display = 'block';
+        result.className = 'upload-result error';
+        result.innerHTML = '<i class="bi bi-x-circle-fill"></i> Network error during upload';
+        uploadBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
+        uploadBtn.disabled = false;
+      });
+      
+      xhr.open('POST', '/api/upload', true);
+      xhr.send(formData);
+    }
+  </script>
 
   ${!uiConfig.hide_footer ? `
   <footer class="footer mt-auto py-3 text-muted ${uiConfig.footer_style_class}">
@@ -5344,6 +5910,82 @@ async function handleRequest(request, event) {
     }
     // --- END NEW ADMIN PANEL ROUTES ---
 
+    // --- UPLOAD API ROUTES ---
+    // Direct file upload - proxied through worker to avoid CORS issues
+    if (path === '/api/upload' && request.method === 'POST') {
+        if (!isAuthenticated) {
+            return new Response(JSON.stringify({ success: false, error: 'Authentication required' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        if (!authConfig.enable_upload) {
+            return new Response(JSON.stringify({ success: false, error: 'Upload feature is disabled' }), {
+                status: 403,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        try {
+            // Parse multipart form data
+            const formData = await request.formData();
+            const file = formData.get('file');
+
+            if (!file) {
+                return new Response(JSON.stringify({ success: false, error: 'No file provided' }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            const fileName = file.name;
+            const mimeType = file.type || 'application/octet-stream';
+            const fileContent = await file.arrayBuffer();
+
+            // Upload to Google Drive using multipart upload
+            const result = await uploadFileToGoogleDrive(authConfig.upload_folder_id, fileName, mimeType, fileContent);
+
+            if (result.success) {
+                await logActivity('UPLOAD_SUCCESS', username, request, { fileName, fileSize: file.size, mimeType, fileId: result.fileId });
+                return new Response(JSON.stringify({
+                    success: true,
+                    message: 'File uploaded successfully!',
+                    fileId: result.fileId,
+                    fileName: fileName
+                }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            } else {
+                return new Response(JSON.stringify({ success: false, error: result.error || 'Upload failed' }), {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            return new Response(JSON.stringify({ success: false, error: error.message }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+    }
+
+    // Handle CORS preflight for upload
+    if (path === '/api/upload' && request.method === 'OPTIONS') {
+        return new Response(null, {
+            status: 204,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Max-Age': '86400'
+            }
+        });
+    }
+    // --- END UPLOAD API ROUTES ---
+
     if (path == '/app.js') {
         const js = await fetch('https://gitlab.com/GoogleDriveIndex/Google-Drive-Index/-/raw/dev/src/app.js', {
             method: 'GET',
@@ -6022,6 +6664,72 @@ async function checkUserSession(request) {
 
 // ... (rest of the worker.js logic remains the same)
 
+// --- UPLOAD HELPER FUNCTION ---
+/**
+ * Uploads a file to Google Drive using multipart upload
+ * @param {string} parentId - The folder ID to upload to
+ * @param {string} fileName - Name of the file
+ * @param {string} mimeType - MIME type of the file
+ * @param {ArrayBuffer} fileContent - The file content as ArrayBuffer
+ * @returns {Promise<{success: boolean, fileId?: string, error?: string}>}
+ */
+async function uploadFileToGoogleDrive(parentId, fileName, mimeType, fileContent) {
+    const Token = await getAccessToken();
+
+    const metadata = {
+        name: fileName,
+        parents: [parentId]
+    };
+
+    // Create multipart body
+    const boundary = '-------314159265358979323846';
+    const delimiter = '\r\n--' + boundary + '\r\n';
+    const closeDelimiter = '\r\n--' + boundary + '--';
+
+    // Convert ArrayBuffer to base64
+    const bytes = new Uint8Array(fileContent);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    const base64Data = btoa(binary);
+
+    const body =
+        delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify(metadata) +
+        delimiter +
+        'Content-Type: ' + mimeType + '\r\n' +
+        'Content-Transfer-Encoding: base64\r\n\r\n' +
+        base64Data +
+        closeDelimiter;
+
+    const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true';
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + Token,
+                'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+            },
+            body: body
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            return { success: true, fileId: result.id };
+        } else {
+            const errorText = await response.text();
+            console.error('Google Drive upload failed:', response.status, errorText);
+            return { success: false, error: 'Google Drive error: ' + response.status };
+        }
+    } catch (error) {
+        console.error('Upload to Google Drive failed:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 const JSONWebToken = {
     header: {
         alg: 'RS256',
@@ -6168,6 +6876,52 @@ async function genIntegrity(data, key = hmac_base_key) {
 
 async function checkintegrity(text1, text2) {
     return text1 === text2;
+}
+
+// --- UPLOAD HELPER FUNCTIONS ---
+
+/**
+ * Creates a resumable upload session with Google Drive
+ * Returns the upload URL that the browser can use to upload directly
+ * @param {string} parentId - The folder ID to upload to
+ * @param {string} fileName - Name of the file
+ * @param {string} mimeType - MIME type of the file
+ * @returns {Promise<string|null>} - The resumable upload URL or null on failure
+ */
+async function createUploadSession(parentId, fileName, mimeType) {
+    const Token = await getAccessToken();
+
+    const metadata = {
+        name: fileName,
+        parents: [parentId]
+    };
+
+    const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true';
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + Token,
+                'Content-Type': 'application/json; charset=UTF-8',
+                'X-Upload-Content-Type': mimeType
+            },
+            body: JSON.stringify(metadata)
+        });
+
+        if (response.ok) {
+            // The upload URL is in the Location header
+            const uploadUrl = response.headers.get('Location');
+            return uploadUrl;
+        } else {
+            const errorText = await response.text();
+            console.error('Failed to create upload session:', response.status, errorText);
+            return null;
+        }
+    } catch (error) {
+        console.error('Error creating upload session:', error);
+        return null;
+    }
 }
 
 
