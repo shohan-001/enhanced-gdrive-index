@@ -1183,7 +1183,7 @@ function html(current_drive_order = 0, model = {}) {
   <div id="upload-modal" class="upload-modal" onclick="if(event.target===this)closeUploadModal()">
     <div class="upload-modal-content">
       <div class="upload-modal-header">
-        <h3><i class="bi bi-cloud-arrow-up-fill"></i> Upload File</h3>
+        <h3><i class="bi bi-cloud-arrow-up-fill"></i> Upload Files</h3>
         <button class="upload-close-btn" onclick="closeUploadModal()">&times;</button>
       </div>
       <div class="upload-modal-body">
@@ -1193,26 +1193,16 @@ function html(current_drive_order = 0, model = {}) {
              ondragleave="handleDragLeave(event)">
           <div class="upload-dropzone-content">
             <i class="bi bi-cloud-arrow-up upload-icon"></i>
-            <p class="upload-text">Drag & drop your file here</p>
+            <p class="upload-text">Drag & drop files here</p>
             <p class="upload-subtext">or</p>
             <label class="upload-browse-btn">
-              <input type="file" id="file-input" onchange="handleFileSelect(event)" hidden>
+              <input type="file" id="file-input" onchange="handleFileSelect(event)" multiple hidden>
               Browse Files
             </label>
           </div>
         </div>
         
-        <div id="upload-file-info" class="upload-file-info" style="display:none;">
-          <div class="file-info-card">
-            <i class="bi bi-file-earmark file-icon"></i>
-            <div class="file-details">
-              <p id="upload-filename" class="filename"></p>
-              <p id="upload-filesize" class="filesize"></p>
-            </div>
-            <button class="remove-file-btn" onclick="removeSelectedFile()">
-              <i class="bi bi-x-lg"></i>
-            </button>
-          </div>
+        <div id="upload-file-list" class="upload-file-list" style="display:none; max-height: 200px; overflow-y: auto; margin-bottom: 1rem;">
         </div>
         
         <div id="upload-progress-container" class="upload-progress-container" style="display:none;">
@@ -1224,6 +1214,7 @@ function html(current_drive_order = 0, model = {}) {
             <div id="upload-progress-bar" class="progress-bar-fill"></div>
           </div>
           <p id="upload-speed" class="upload-speed"></p>
+          <p id="upload-current-file" style="color: var(--text-secondary); font-size: 0.85rem; text-align: center; margin-top: 0.5rem;"></p>
         </div>
         
         <div id="upload-result" class="upload-result" style="display:none;"></div>
@@ -1580,8 +1571,9 @@ function html(current_drive_order = 0, model = {}) {
   </style>
 
   <script>
-    // Upload functionality
-    let selectedFile = null;
+    // Upload functionality - Multi-file support
+    let selectedFiles = [];
+    let isUploading = false;
     
     function openUploadModal() {
       const modal = document.getElementById('upload-modal');
@@ -1590,6 +1582,7 @@ function html(current_drive_order = 0, model = {}) {
     }
     
     function closeUploadModal() {
+      if (isUploading) return;
       const modal = document.getElementById('upload-modal');
       modal.classList.remove('show');
       setTimeout(() => {
@@ -1599,13 +1592,16 @@ function html(current_drive_order = 0, model = {}) {
     }
     
     function resetUploadForm() {
-      selectedFile = null;
+      selectedFiles = [];
       document.getElementById('file-input').value = '';
       document.getElementById('upload-dropzone').style.display = 'block';
-      document.getElementById('upload-file-info').style.display = 'none';
+      document.getElementById('upload-file-list').style.display = 'none';
+      document.getElementById('upload-file-list').innerHTML = '';
       document.getElementById('upload-progress-container').style.display = 'none';
       document.getElementById('upload-result').style.display = 'none';
       document.getElementById('upload-btn').disabled = true;
+      document.getElementById('upload-btn').innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
+      isUploading = false;
     }
     
     function handleDragOver(e) {
@@ -1624,32 +1620,51 @@ function html(current_drive_order = 0, model = {}) {
       e.preventDefault();
       e.stopPropagation();
       document.getElementById('upload-dropzone').classList.remove('drag-over');
-      
       if (e.dataTransfer.files.length > 0) {
-        selectFile(e.dataTransfer.files[0]);
+        addFiles(Array.from(e.dataTransfer.files));
       }
     }
     
     function handleFileSelect(e) {
       if (e.target.files.length > 0) {
-        selectFile(e.target.files[0]);
+        addFiles(Array.from(e.target.files));
       }
     }
     
-    function selectFile(file) {
-      selectedFile = file;
-      
+    function addFiles(files) {
+      selectedFiles = [...selectedFiles, ...files];
+      renderFileList();
       document.getElementById('upload-dropzone').style.display = 'none';
-      document.getElementById('upload-file-info').style.display = 'block';
-      document.getElementById('upload-filename').textContent = file.name;
-      document.getElementById('upload-filesize').textContent = formatFileSize(file.size);
+      document.getElementById('upload-file-list').style.display = 'block';
       document.getElementById('upload-btn').disabled = false;
       document.getElementById('upload-result').style.display = 'none';
     }
     
-    function removeSelectedFile() {
-      resetUploadForm();
-      document.getElementById('upload-dropzone').style.display = 'block';
+    function removeFile(index) {
+      selectedFiles.splice(index, 1);
+      if (selectedFiles.length === 0) {
+        resetUploadForm();
+        document.getElementById('upload-dropzone').style.display = 'block';
+      } else {
+        renderFileList();
+      }
+    }
+    
+    function renderFileList() {
+      const container = document.getElementById('upload-file-list');
+      container.innerHTML = selectedFiles.map((file, i) => 
+        '<div class="file-info-card" style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem; background: rgba(55, 168, 110, 0.1); border: 1px solid rgba(55, 168, 110, 0.3); border-radius: 12px; margin-bottom: 0.5rem;">' +
+          '<i class="bi bi-file-earmark" style="font-size: 1.5rem; color: #37a86e;"></i>' +
+          '<div style="flex: 1; overflow: hidden;">' +
+            '<p style="color: var(--text-primary); font-weight: 600; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + file.name + '</p>' +
+            '<p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0.25rem 0 0 0;">' + formatFileSize(file.size) + '</p>' +
+          '</div>' +
+          '<button onclick="removeFile(' + i + ')" style="background: rgba(255, 107, 107, 0.2); border: none; color: #ff6b6b; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;">' +
+            '<i class="bi bi-x-lg"></i>' +
+          '</button>' +
+        '</div>'
+      ).join('');
+      container.innerHTML += '<p style="color: var(--text-secondary); font-size: 0.85rem; text-align: center; margin-top: 0.5rem;">' + selectedFiles.length + ' file(s) selected • Total: ' + formatFileSize(selectedFiles.reduce((a,f) => a + f.size, 0)) + '</p>';
     }
     
     function formatFileSize(bytes) {
@@ -1661,76 +1676,97 @@ function html(current_drive_order = 0, model = {}) {
     }
     
     async function startUpload() {
-      if (!selectedFile) return;
+      if (selectedFiles.length === 0 || isUploading) return;
+      isUploading = true;
       
       const uploadBtn = document.getElementById('upload-btn');
       const progressContainer = document.getElementById('upload-progress-container');
-      const progressBar = document.getElementById('upload-progress-bar');
-      const percentage = document.getElementById('upload-percentage');
-      const status = document.getElementById('upload-status');
-      const speed = document.getElementById('upload-speed');
       const result = document.getElementById('upload-result');
+      const fileList = document.getElementById('upload-file-list');
       
       uploadBtn.disabled = true;
-      uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
       progressContainer.style.display = 'block';
+      fileList.style.display = 'none';
       result.style.display = 'none';
-      status.textContent = 'Uploading to server...';
       
-      const formData = new FormData();
-      formData.append('file', selectedFile);
+      let successCount = 0;
+      let failCount = 0;
       
-      const xhr = new XMLHttpRequest();
-      const startTime = Date.now();
-      
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const progress = Math.round((e.loaded / e.total) * 100);
-          progressBar.style.width = progress + '%';
-          percentage.textContent = progress + '%';
-          const elapsed = (Date.now() - startTime) / 1000;
-          if (elapsed > 0) { speed.textContent = formatFileSize(e.loaded / elapsed) + '/s'; }
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        document.getElementById('upload-status').textContent = 'Uploading ' + (i + 1) + ' of ' + selectedFiles.length + '...';
+        document.getElementById('upload-current-file').textContent = file.name;
+        uploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + (i + 1) + '/' + selectedFiles.length;
+        
+        try {
+          await uploadSingleFile(file);
+          successCount++;
+        } catch (err) {
+          console.error('Upload error:', file.name, err);
+          failCount++;
         }
-      });
+      }
       
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const response = JSON.parse(xhr.responseText);
-          if (response.success) {
-            status.textContent = 'Complete!';
-            progressBar.style.width = '100%';
-            percentage.textContent = '100%';
-            result.style.display = 'block';
-            result.className = 'upload-result success';
-            result.innerHTML = '<i class="bi bi-check-circle-fill"></i> Thank you for uploading! <br><small>Your file is now available in the <a href="/0:/User_Uploads/" style="color: #37a86e; font-weight: 600;">📁 User Uploads</a> folder.</small>';
-            uploadBtn.innerHTML = '<i class="bi bi-check-lg"></i> Done';
-            setTimeout(() => { resetUploadForm(); closeUploadModal(); }, 4000);
-          } else {
-            result.style.display = 'block';
-            result.className = 'upload-result error';
-            result.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + (response.error || 'Upload failed');
-            uploadBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
-            uploadBtn.disabled = false;
-          }
-        } else {
-          result.style.display = 'block';
-          result.className = 'upload-result error';
-          result.innerHTML = '<i class="bi bi-x-circle-fill"></i> Upload failed: ' + xhr.status;
-          uploadBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
-          uploadBtn.disabled = false;
-        }
-      });
+      document.getElementById('upload-progress-container').style.display = 'none';
+      result.style.display = 'block';
       
-      xhr.addEventListener('error', () => {
-        result.style.display = 'block';
-        result.className = 'upload-result error';
-        result.innerHTML = '<i class="bi bi-x-circle-fill"></i> Network error during upload';
+      if (failCount === 0) {
+        result.className = 'upload-result success';
+        result.innerHTML = '<i class="bi bi-check-circle-fill"></i> All ' + successCount + ' file(s) uploaded successfully! <br><small>Your files are now available in the <a href="/0:/User_Uploads/" style="color: #37a86e; font-weight: 600;">📁 User Uploads</a> folder.</small>';
+        uploadBtn.innerHTML = '<i class="bi bi-check-lg"></i> Done';
+        setTimeout(() => { resetUploadForm(); closeUploadModal(); }, 4000);
+      } else if (successCount > 0) {
+        result.className = 'upload-result';
+        result.style.background = 'rgba(255, 193, 7, 0.2)';
+        result.style.border = '1px solid rgba(255, 193, 7, 0.4)';
+        result.style.color = '#ffc107';
+        result.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> ' + successCount + ' uploaded, ' + failCount + ' failed';
         uploadBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
         uploadBtn.disabled = false;
+        isUploading = false;
+      } else {
+        result.className = 'upload-result error';
+        result.innerHTML = '<i class="bi bi-x-circle-fill"></i> All uploads failed';
+        uploadBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
+        uploadBtn.disabled = false;
+        isUploading = false;
+      }
+    }
+    
+    function uploadSingleFile(file) {
+      return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const xhr = new XMLHttpRequest();
+        const startTime = Date.now();
+        const progressBar = document.getElementById('upload-progress-bar');
+        const percentage = document.getElementById('upload-percentage');
+        const speed = document.getElementById('upload-speed');
+        
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const progress = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = progress + '%';
+            percentage.textContent = progress + '%';
+            const elapsed = (Date.now() - startTime) / 1000;
+            if (elapsed > 0) { speed.textContent = formatFileSize(e.loaded / elapsed) + '/s'; }
+          }
+        });
+        
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const response = JSON.parse(xhr.responseText);
+            if (response.success) { resolve(response); }
+            else { reject(new Error(response.error || 'Upload failed')); }
+          } else { reject(new Error('Upload failed: ' + xhr.status)); }
+        });
+        
+        xhr.addEventListener('error', () => { reject(new Error('Network error')); });
+        
+        xhr.open('POST', '/api/upload', true);
+        xhr.send(formData);
       });
-      
-      xhr.open('POST', '/api/upload', true);
-      xhr.send(formData);
     }
   </script>
 
