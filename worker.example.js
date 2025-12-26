@@ -1595,8 +1595,8 @@ const homepage = `<!DOCTYPE html>
             50% { transform: translate(50px, -50px) scale(1.1); opacity: 0.8; }
         }
 
-        /* ❄️ Christmas Snowfall Animation ❄️ */
-        .snowfall-container {
+        /* Floating Particles Animation */
+        .particles-container {
             position: fixed;
             top: 0;
             left: 0;
@@ -1607,55 +1607,54 @@ const homepage = `<!DOCTYPE html>
             overflow: hidden;
         }
 
-        .snowflake {
+        .particle {
             position: absolute;
-            top: -20px;
-            color: #fff;
-            font-size: 1rem;
-            text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
-            opacity: 0.9;
-            animation: snowfall linear infinite;
+            width: 4px;
+            height: 4px;
+            background: var(--accent-light);
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: float linear infinite;
             will-change: transform;
         }
 
-        .snowflake.small {
-            font-size: 0.6rem;
-            opacity: 0.6;
+        .particle.small {
+            width: 3px;
+            height: 3px;
+            opacity: 0.2;
         }
 
-        .snowflake.medium {
-            font-size: 1rem;
-            opacity: 0.8;
+        .particle.medium {
+            width: 5px;
+            height: 5px;
+            opacity: 0.35;
         }
 
-        .snowflake.large {
-            font-size: 1.4rem;
-            opacity: 1;
-            text-shadow: 0 0 10px rgba(255, 255, 255, 0.9), 0 0 20px rgba(173, 216, 230, 0.5);
+        .particle.large {
+            width: 6px;
+            height: 6px;
+            opacity: 0.4;
+            box-shadow: 0 0 10px var(--accent-light);
         }
 
-        @keyframes snowfall {
+        @keyframes float {
             0% {
-                transform: translateY(-20px) rotate(0deg) translateX(0);
+                transform: translateY(100vh) translateX(0) scale(1);
+                opacity: 0;
             }
-            25% {
-                transform: translateY(25vh) rotate(90deg) translateX(15px);
+            10% {
+                opacity: 0.3;
             }
             50% {
-                transform: translateY(50vh) rotate(180deg) translateX(-15px);
+                transform: translateY(50vh) translateX(30px) scale(1.1);
             }
-            75% {
-                transform: translateY(75vh) rotate(270deg) translateX(10px);
+            90% {
+                opacity: 0.3;
             }
             100% {
-                transform: translateY(105vh) rotate(360deg) translateX(-5px);
+                transform: translateY(-20px) translateX(-20px) scale(0.8);
+                opacity: 0;
             }
-        }
-
-        /* Gentle sway animation for variety */
-        @keyframes sway {
-            0%, 100% { transform: translateX(0); }
-            50% { transform: translateX(20px); }
         }
 
         /* Glassmorphism Navbar (Increased blur and adjusted transparency) */
@@ -2245,7 +2244,7 @@ const homepage = `<!DOCTYPE html>
     </script>
 </head>
 <body>
-    <div class="snowfall-container" id="snowfall"></div>
+    <div class="particles-container" id="particles"></div>
 
     <nav class="navbar" id="navbar">
         <div class="navbar-content">
@@ -2578,33 +2577,31 @@ const homepage = `<!DOCTYPE html>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // ❄️ Create Christmas Snowfall Animation ❄️
-        function createSnowfall() {
-            const snowfallContainer = document.getElementById('snowfall');
-            const snowflakeCount = 50; // Number of snowflakes
-            const snowflakeChars = ['❄', '❅', '❆', '✻', '✼', '❋', '•'];
+        // Create Floating Particles Animation
+        function createParticles() {
+            const container = document.getElementById('particles');
+            const particleCount = 30;
             const sizes = ['small', 'medium', 'large'];
             
-            for (let i = 0; i < snowflakeCount; i++) {
-                const snowflake = document.createElement('div');
-                snowflake.className = 'snowflake ' + sizes[Math.floor(Math.random() * sizes.length)];
-                snowflake.textContent = snowflakeChars[Math.floor(Math.random() * snowflakeChars.length)];
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle ' + sizes[Math.floor(Math.random() * sizes.length)];
                 
                 // Random horizontal position
-                snowflake.style.left = Math.random() * 100 + '%';
+                particle.style.left = Math.random() * 100 + '%';
                 
-                // Random animation duration (5-15 seconds for varied falling speeds)
-                const duration = Math.random() * 10 + 5;
-                snowflake.style.animationDuration = duration + 's';
+                // Random animation duration (15-30 seconds for slow floating)
+                const duration = Math.random() * 15 + 15;
+                particle.style.animationDuration = duration + 's';
                 
-                // Random delay so they don't all start at once
-                snowflake.style.animationDelay = Math.random() * 10 + 's';
+                // Random delay
+                particle.style.animationDelay = Math.random() * 15 + 's';
                 
-                snowfallContainer.appendChild(snowflake);
+                container.appendChild(particle);
             }
         }
         
-        createSnowfall();
+        createParticles();
 
         // Mobile Menu Toggle
         const menuToggle = document.getElementById('menuToggle');
