@@ -48,7 +48,7 @@ const authConfig = {
 
     // --- UPLOAD CONFIGURATION ---
     "enable_upload": true, // Enable file upload feature
-    "upload_folder_id": "1j1BcWiDrMvjrKedF3bB5QgggHzCtpKpi", // Folder ID where files will be uploaded
+    "upload_folder_id": "YOUR_UPLOAD_FOLDER_ID", // Folder ID where files will be uploaded
 
     // --- Add folder IDs here to exclude them from search results ---
     "excluded_from_search": [
@@ -104,7 +104,7 @@ const uiConfig = {
     "path_nav_alert_class": "alert alert-primary",
     "file_view_alert_class": "alert alert-danger",
     "file_count_alert_class": "alert alert-secondary",
-    "contact_link": "YOUR_CONTACT_LINK", // e.g., Telegram, email, etc.
+    "contact_link": "/contact",
     "copyright_year": "2025",
     "company_name": "YOUR_COMPANY_NAME",
     "company_link": "YOUR_COMPANY_URL",
@@ -1228,407 +1228,94 @@ function html(current_drive_order = 0, model = {}) {
   </div>
 
   <style>
-    /* Upload FAB Button */
-    .upload-fab {
-      position: fixed;
-      bottom: 100px;
-      right: 30px;
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%);
-      border: none;
-      color: white;
-      font-size: 1.5rem;
-      cursor: pointer;
-      box-shadow: 0 8px 32px rgba(55, 168, 110, 0.4);
-      z-index: 1000;
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .upload-fab:hover {
-      transform: translateY(-5px) scale(1.1);
-      box-shadow: 0 12px 40px rgba(55, 168, 110, 0.6);
-    }
-    
-    .upload-fab:active {
-      transform: translateY(-2px) scale(1.05);
-    }
-
-    /* Upload Modal */
-    .upload-modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(13, 31, 35, 0.9);
-      backdrop-filter: blur(10px);
-      z-index: 2000;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-    
-    .upload-modal.show {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 1;
-    }
-    
-    .upload-modal-content {
-      background: rgba(19, 46, 53, 0.95);
-      border: 1px solid rgba(105, 129, 141, 0.3);
-      border-radius: 20px;
-      width: 90%;
-      max-width: 500px;
-      backdrop-filter: blur(30px);
-      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
-      transform: translateY(20px) scale(0.95);
-      transition: all 0.3s ease;
-      animation: modalSlideIn 0.3s ease forwards;
-    }
-    
-    @keyframes modalSlideIn {
-      to {
-        transform: translateY(0) scale(1);
-      }
-    }
-    
-    .upload-modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1.5rem;
-      border-bottom: 1px solid rgba(105, 129, 141, 0.2);
-    }
-    
-    .upload-modal-header h3 {
-      margin: 0;
-      color: var(--text-primary);
-      font-size: 1.3rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    
-    .upload-modal-header h3 i {
-      color: #37a86e;
-    }
-    
-    .upload-close-btn {
-      background: none;
-      border: none;
-      color: var(--text-secondary);
-      font-size: 1.5rem;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .upload-close-btn:hover {
-      background: rgba(255, 107, 107, 0.2);
-      color: #ff6b6b;
-    }
-    
-    .upload-modal-body {
-      padding: 1.5rem;
-    }
-    
-    /* Dropzone */
-    .upload-dropzone {
-      border: 2px dashed rgba(105, 129, 141, 0.4);
-      border-radius: 16px;
-      padding: 3rem 2rem;
-      text-align: center;
-      transition: all 0.3s ease;
-      background: rgba(13, 31, 35, 0.5);
-      cursor: pointer;
-    }
-    
-    .upload-dropzone:hover,
-    .upload-dropzone.drag-over {
-      border-color: #37a86e;
-      background: rgba(55, 168, 110, 0.1);
-    }
-    
-    .upload-dropzone.drag-over {
-      transform: scale(1.02);
-    }
-    
-    .upload-icon {
-      font-size: 4rem;
-      color: var(--text-secondary);
-      margin-bottom: 1rem;
-      transition: all 0.3s ease;
-    }
-    
-    .upload-dropzone:hover .upload-icon,
-    .upload-dropzone.drag-over .upload-icon {
-      color: #37a86e;
-      transform: translateY(-5px);
-    }
-    
-    .upload-text {
-      color: var(--text-primary);
-      font-size: 1.1rem;
-      margin-bottom: 0.5rem;
-    }
-    
-    .upload-subtext {
-      color: var(--text-secondary);
-      margin-bottom: 1rem;
-    }
-    
-    .upload-browse-btn {
-      display: inline-block;
-      padding: 0.75rem 1.5rem;
-      background: linear-gradient(135deg, var(--accent-main), var(--accent-light));
-      color: white;
-      border-radius: 50px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      font-weight: 600;
-    }
-    
-    .upload-browse-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(45, 74, 83, 0.4);
-    }
-    
-    /* File Info */
-    .upload-file-info {
-      margin-top: 1rem;
-    }
-    
-    .file-info-card {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      padding: 1rem;
-      background: rgba(55, 168, 110, 0.1);
-      border: 1px solid rgba(55, 168, 110, 0.3);
-      border-radius: 12px;
-    }
-    
-    .file-icon {
-      font-size: 2rem;
-      color: #37a86e;
-    }
-    
-    .file-details {
-      flex: 1;
-    }
-    
-    .filename {
-      color: var(--text-primary);
-      font-weight: 600;
-      margin: 0;
-      word-break: break-all;
-    }
-    
-    .filesize {
-      color: var(--text-secondary);
-      font-size: 0.85rem;
-      margin: 0.25rem 0 0 0;
-    }
-    
-    .remove-file-btn {
-      background: rgba(255, 107, 107, 0.2);
-      border: none;
-      color: #ff6b6b;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-    
-    .remove-file-btn:hover {
-      background: rgba(255, 107, 107, 0.4);
-      transform: scale(1.1);
-    }
-    
-    /* Progress Bar */
-    .upload-progress-container {
-      margin-top: 1rem;
-    }
-    
-    .progress-header {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 0.5rem;
-      color: var(--text-primary);
-      font-weight: 500;
-    }
-    
-    .progress-bar-bg {
-      height: 10px;
-      background: rgba(105, 129, 141, 0.2);
-      border-radius: 5px;
-      overflow: hidden;
-    }
-    
-    .progress-bar-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #37a86e, #69818D);
-      border-radius: 5px;
-      transition: width 0.3s ease;
-    }
-    
-    .upload-speed {
-      color: var(--text-secondary);
-      font-size: 0.85rem;
-      margin-top: 0.5rem;
-      text-align: center;
-    }
-    
-    /* Result */
-    .upload-result {
-      margin-top: 1rem;
-      padding: 1rem;
-      border-radius: 12px;
-      text-align: center;
-    }
-    
-    .upload-result.success {
-      background: rgba(55, 168, 110, 0.2);
-      border: 1px solid rgba(55, 168, 110, 0.4);
-      color: #37a86e;
-    }
-    
-    .upload-result.error {
-      background: rgba(255, 107, 107, 0.2);
-      border: 1px solid rgba(255, 107, 107, 0.4);
-      color: #ff6b6b;
-    }
-    
-    /* Footer */
-    .upload-modal-footer {
-      padding: 1rem 1.5rem 1.5rem;
-    }
-    
-    .upload-submit-btn {
-      width: 100%;
-      padding: 1rem;
-      background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%);
-      border: none;
-      border-radius: 12px;
-      color: white;
-      font-size: 1.1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-    }
-    
-    .upload-submit-btn:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(55, 168, 110, 0.4);
-    }
-    
-    .upload-submit-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    
-    /* Responsive */
-    @media (max-width: 768px) {
-      .upload-fab {
-        bottom: 140px;
-        right: 20px;
-        width: 50px;
-        height: 50px;
-        font-size: 1.2rem;
-      }
-      
-      .upload-modal-content {
-        width: 95%;
-        margin: 1rem;
-      }
-      
-      .upload-dropzone {
-        padding: 2rem 1rem;
-      }
-      
-      .upload-icon {
-        font-size: 3rem;
-      }
-    }
+    .upload-fab { position: fixed; bottom: 100px; right: 30px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%); border: none; color: white; font-size: 1.5rem; cursor: pointer; box-shadow: 0 8px 32px rgba(55, 168, 110, 0.4); z-index: 1000; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; }
+    .upload-fab:hover { transform: translateY(-5px) scale(1.1); box-shadow: 0 12px 40px rgba(55, 168, 110, 0.6); }
+    .upload-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(13, 31, 35, 0.9); backdrop-filter: blur(10px); z-index: 2000; opacity: 0; transition: opacity 0.3s ease; }
+    .upload-modal.show { display: flex; align-items: center; justify-content: center; opacity: 1; }
+    .upload-modal-content { background: rgba(19, 46, 53, 0.95); border: 1px solid rgba(105, 129, 141, 0.3); border-radius: 20px; width: 90%; max-width: 500px; backdrop-filter: blur(30px); box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); animation: modalSlideIn 0.3s ease forwards; }
+    @keyframes modalSlideIn { to { transform: translateY(0) scale(1); } }
+    .upload-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; border-bottom: 1px solid rgba(105, 129, 141, 0.2); }
+    .upload-modal-header h3 { margin: 0; color: var(--text-primary); font-size: 1.3rem; display: flex; align-items: center; gap: 0.5rem; }
+    .upload-modal-header h3 i { color: #37a86e; }
+    .upload-close-btn { background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; transition: all 0.3s ease; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .upload-close-btn:hover { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+    .upload-modal-body { padding: 1.5rem; }
+    .upload-dropzone { border: 2px dashed rgba(105, 129, 141, 0.4); border-radius: 16px; padding: 3rem 2rem; text-align: center; transition: all 0.3s ease; background: rgba(13, 31, 35, 0.5); cursor: pointer; }
+    .upload-dropzone:hover, .upload-dropzone.drag-over { border-color: #37a86e; background: rgba(55, 168, 110, 0.1); }
+    .upload-icon { font-size: 4rem; color: var(--text-secondary); margin-bottom: 1rem; transition: all 0.3s ease; }
+    .upload-dropzone:hover .upload-icon { color: #37a86e; transform: translateY(-5px); }
+    .upload-text { color: var(--text-primary); font-size: 1.1rem; margin-bottom: 0.5rem; }
+    .upload-subtext { color: var(--text-secondary); margin-bottom: 1rem; }
+    .upload-browse-btn { display: inline-block; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, var(--accent-main), var(--accent-light)); color: white; border-radius: 50px; cursor: pointer; transition: all 0.3s ease; font-weight: 600; }
+    .upload-browse-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(45, 74, 83, 0.4); }
+    .upload-file-info { margin-top: 1rem; }
+    .file-info-card { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: rgba(55, 168, 110, 0.1); border: 1px solid rgba(55, 168, 110, 0.3); border-radius: 12px; }
+    .file-icon { font-size: 2rem; color: #37a86e; }
+    .file-details { flex: 1; }
+    .filename { color: var(--text-primary); font-weight: 600; margin: 0; word-break: break-all; }
+    .filesize { color: var(--text-secondary); font-size: 0.85rem; margin: 0.25rem 0 0 0; }
+    .remove-file-btn { background: rgba(255, 107, 107, 0.2); border: none; color: #ff6b6b; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; transition: all 0.3s ease; }
+    .remove-file-btn:hover { background: rgba(255, 107, 107, 0.4); transform: scale(1.1); }
+    .upload-progress-container { margin-top: 1rem; }
+    .progress-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 500; }
+    .progress-bar-bg { height: 10px; background: rgba(105, 129, 141, 0.2); border-radius: 5px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #37a86e, #69818D); border-radius: 5px; transition: width 0.3s ease; }
+    .upload-speed { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.5rem; text-align: center; }
+    .upload-result { margin-top: 1rem; padding: 1rem; border-radius: 12px; text-align: center; }
+    .upload-result.success { background: rgba(55, 168, 110, 0.2); border: 1px solid rgba(55, 168, 110, 0.4); color: #37a86e; }
+    .upload-result.error { background: rgba(255, 107, 107, 0.2); border: 1px solid rgba(255, 107, 107, 0.4); color: #ff6b6b; }
+    .upload-modal-footer { padding: 1rem 1.5rem 1.5rem; }
+    .upload-submit-btn { width: 100%; padding: 1rem; background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%); border: none; border-radius: 12px; color: white; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .upload-submit-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(55, 168, 110, 0.4); }
+    .upload-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    @media (max-width: 768px) { .upload-fab { bottom: 140px; right: 20px; width: 50px; height: 50px; font-size: 1.2rem; } .upload-modal-content { width: 95%; } .upload-dropzone { padding: 2rem 1rem; } .upload-icon { font-size: 3rem; } }
   </style>
 
   <script>
-    // Upload functionality - Multi-file support
     let selectedFiles = [];
     let isUploading = false;
     
-    function openUploadModal() {
-      const modal = document.getElementById('upload-modal');
-      modal.style.display = 'flex';
-      setTimeout(() => modal.classList.add('show'), 10);
+    function openUploadModal() { 
+      const modal = document.getElementById('upload-modal'); 
+      modal.style.display = 'flex'; 
+      setTimeout(() => modal.classList.add('show'), 10); 
     }
     
-    function closeUploadModal() {
-      if (isUploading) return;
-      const modal = document.getElementById('upload-modal');
-      modal.classList.remove('show');
-      setTimeout(() => {
-        modal.style.display = 'none';
-        resetUploadForm();
-      }, 300);
+    function closeUploadModal() { 
+      if (isUploading) return; // Don't close while uploading
+      const modal = document.getElementById('upload-modal'); 
+      modal.classList.remove('show'); 
+      setTimeout(() => { modal.style.display = 'none'; resetUploadForm(); }, 300); 
     }
     
-    function resetUploadForm() {
-      selectedFiles = [];
-      document.getElementById('file-input').value = '';
-      document.getElementById('upload-dropzone').style.display = 'block';
+    function resetUploadForm() { 
+      selectedFiles = []; 
+      document.getElementById('file-input').value = ''; 
+      document.getElementById('upload-dropzone').style.display = 'block'; 
       document.getElementById('upload-file-list').style.display = 'none';
       document.getElementById('upload-file-list').innerHTML = '';
-      document.getElementById('upload-progress-container').style.display = 'none';
-      document.getElementById('upload-result').style.display = 'none';
+      document.getElementById('upload-progress-container').style.display = 'none'; 
+      document.getElementById('upload-result').style.display = 'none'; 
       document.getElementById('upload-btn').disabled = true;
       document.getElementById('upload-btn').innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> Upload';
       isUploading = false;
     }
     
-    function handleDragOver(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      document.getElementById('upload-dropzone').classList.add('drag-over');
+    function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('upload-dropzone').classList.add('drag-over'); }
+    function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('upload-dropzone').classList.remove('drag-over'); }
+    
+    function handleDrop(e) { 
+      e.preventDefault(); e.stopPropagation(); 
+      document.getElementById('upload-dropzone').classList.remove('drag-over'); 
+      if (e.dataTransfer.files.length > 0) { 
+        addFiles(Array.from(e.dataTransfer.files)); 
+      } 
     }
     
-    function handleDragLeave(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      document.getElementById('upload-dropzone').classList.remove('drag-over');
-    }
-    
-    function handleDrop(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      document.getElementById('upload-dropzone').classList.remove('drag-over');
-      if (e.dataTransfer.files.length > 0) {
-        addFiles(Array.from(e.dataTransfer.files));
-      }
-    }
-    
-    function handleFileSelect(e) {
-      if (e.target.files.length > 0) {
-        addFiles(Array.from(e.target.files));
-      }
+    function handleFileSelect(e) { 
+      if (e.target.files.length > 0) { 
+        addFiles(Array.from(e.target.files)); 
+      } 
     }
     
     function addFiles(files) {
@@ -1667,13 +1354,7 @@ function html(current_drive_order = 0, model = {}) {
       container.innerHTML += '<p style="color: var(--text-secondary); font-size: 0.85rem; text-align: center; margin-top: 0.5rem;">' + selectedFiles.length + ' file(s) selected • Total: ' + formatFileSize(selectedFiles.reduce((a,f) => a + f.size, 0)) + '</p>';
     }
     
-    function formatFileSize(bytes) {
-      if (bytes === 0) return '0 Bytes';
-      const k = 1024;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
+    function formatFileSize(bytes) { if (bytes === 0) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB', 'GB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; }
     
     async function startUpload() {
       if (selectedFiles.length === 0 || isUploading) return;
@@ -1707,6 +1388,7 @@ function html(current_drive_order = 0, model = {}) {
         }
       }
       
+      // Show results
       document.getElementById('upload-progress-container').style.display = 'none';
       result.style.display = 'block';
       
@@ -1913,8 +1595,8 @@ const homepage = `<!DOCTYPE html>
             50% { transform: translate(50px, -50px) scale(1.1); opacity: 0.8; }
         }
 
-        /* Floating Particles (Using Accent) */
-        .particles {
+        /* ❄️ Christmas Snowfall Animation ❄️ */
+        .snowfall-container {
             position: fixed;
             top: 0;
             left: 0;
@@ -1922,22 +1604,58 @@ const homepage = `<!DOCTYPE html>
             height: 100%;
             z-index: 1;
             pointer-events: none;
+            overflow: hidden;
         }
 
-        .particle {
+        .snowflake {
             position: absolute;
-            width: 4px;
-            height: 4px;
-            background: var(--accent-light);
-            border-radius: 50%;
-            opacity: 0.3;
-            animation: float 15s infinite ease-in-out;
+            top: -20px;
+            color: #fff;
+            font-size: 1rem;
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+            opacity: 0.9;
+            animation: snowfall linear infinite;
+            will-change: transform;
         }
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0) translateX(0); }
-            33% { transform: translateY(-100px) translateX(50px); }
-            66% { transform: translateY(-50px) translateX(-50px); }
+        .snowflake.small {
+            font-size: 0.6rem;
+            opacity: 0.6;
+        }
+
+        .snowflake.medium {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+
+        .snowflake.large {
+            font-size: 1.4rem;
+            opacity: 1;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.9), 0 0 20px rgba(173, 216, 230, 0.5);
+        }
+
+        @keyframes snowfall {
+            0% {
+                transform: translateY(-20px) rotate(0deg) translateX(0);
+            }
+            25% {
+                transform: translateY(25vh) rotate(90deg) translateX(15px);
+            }
+            50% {
+                transform: translateY(50vh) rotate(180deg) translateX(-15px);
+            }
+            75% {
+                transform: translateY(75vh) rotate(270deg) translateX(10px);
+            }
+            100% {
+                transform: translateY(105vh) rotate(360deg) translateX(-5px);
+            }
+        }
+
+        /* Gentle sway animation for variety */
+        @keyframes sway {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(20px); }
         }
 
         /* Glassmorphism Navbar (Increased blur and adjusted transparency) */
@@ -2527,7 +2245,7 @@ const homepage = `<!DOCTYPE html>
     </script>
 </head>
 <body>
-    <div class="particles" id="particles"></div>
+    <div class="snowfall-container" id="snowfall"></div>
 
     <nav class="navbar" id="navbar">
         <div class="navbar-content">
@@ -2540,7 +2258,7 @@ const homepage = `<!DOCTYPE html>
             <div class="nav-links" id="navLinks">
                 <a href="/" class="nav-link active">Home</a>
                 <a href="/about" class="nav-link">About</a>
-                <a href="${uiConfig.contact_link}" target="_blank" class="nav-link">Contact</a>
+                <a href="/contact" class="nav-link">Contact</a>
                 ${uiConfig.show_logout_button ? '<a href="/logout" class="nav-link">Logout</a>' : ''}
             </div>
         </div>
@@ -2586,7 +2304,7 @@ const homepage = `<!DOCTYPE html>
                 <a href="/" class="footer-link">Home</a>
                 <a href="/about" class="footer-link">About</a>
                 <a href="${uiConfig.contact_link}" target="_blank" class="footer-link">Contact</a>
-                <a href="https://github.com/shohan-001/Gdrive-Index" target="_blank" class="footer-link">GitHub</a>
+                <a href="https://github.com/shohan-001/enhanced-gdrive-index" target="_blank" class="footer-link">GitHub</a>
             </div>
             <p class="footer-text" style="opacity: 0.7;">
                 Powered by <a href="https://www.npmjs.com/package/@googledrive/index" target="_blank">GDI</a>
@@ -2594,25 +2312,299 @@ const homepage = `<!DOCTYPE html>
         </div>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Upload Button (Floating) -->
+    ${authConfig.enable_upload ? `
+    <button id="upload-fab" class="upload-fab" onclick="openUploadModal()" title="Upload File">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+        </svg>
+    </button>
+    ` : ''}
+
+    <!-- Upload Modal -->
+    <div id="upload-modal" class="upload-modal" onclick="if(event.target===this)closeUploadModal()">
+        <div class="upload-modal-content">
+            <div class="upload-modal-header">
+                <h3>📤 Upload Files</h3>
+                <button class="upload-close-btn" onclick="closeUploadModal()">&times;</button>
+            </div>
+            <div class="upload-modal-body">
+                <div id="upload-dropzone" class="upload-dropzone" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                    <div class="upload-dropzone-content">
+                        <div class="upload-icon">📁</div>
+                        <p class="upload-text">Drag & drop files here</p>
+                        <p class="upload-subtext">or</p>
+                        <label class="upload-browse-btn">
+                            <input type="file" id="file-input" onchange="handleFileSelect(event)" multiple hidden>
+                            Browse Files
+                        </label>
+                    </div>
+                </div>
+                <div id="upload-file-list" class="upload-file-list" style="display:none; max-height: 200px; overflow-y: auto; margin-bottom: 1rem;"></div>
+                <div id="upload-progress-container" class="upload-progress-container" style="display:none;">
+                    <div class="progress-header">
+                        <span id="upload-status">Uploading...</span>
+                        <span id="upload-percentage">0%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div id="upload-progress-bar" class="progress-bar-fill"></div>
+                    </div>
+                    <p id="upload-speed" class="upload-speed"></p>
+                    <p id="upload-current-file" style="color: var(--text-secondary); font-size: 0.85rem; text-align: center; margin-top: 0.5rem;"></p>
+                </div>
+                <div id="upload-result" class="upload-result" style="display:none;"></div>
+            </div>
+            <div class="upload-modal-footer">
+                <button id="upload-btn" class="upload-submit-btn" onclick="startUpload()" disabled>
+                    📤 Upload
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .upload-fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%); border: none; color: white; font-size: 1.5rem; cursor: pointer; box-shadow: 0 8px 32px rgba(55, 168, 110, 0.4); z-index: 1000; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; }
+        .upload-fab:hover { transform: translateY(-5px) scale(1.1); box-shadow: 0 12px 40px rgba(55, 168, 110, 0.6); }
+        .upload-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(13, 31, 35, 0.9); backdrop-filter: blur(10px); z-index: 2000; opacity: 0; transition: opacity 0.3s ease; }
+        .upload-modal.show { display: flex; align-items: center; justify-content: center; opacity: 1; }
+        .upload-modal-content { background: rgba(19, 46, 53, 0.95); border: 1px solid rgba(105, 129, 141, 0.3); border-radius: 20px; width: 90%; max-width: 500px; backdrop-filter: blur(30px); box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); animation: modalSlideIn 0.3s ease forwards; }
+        @keyframes modalSlideIn { to { transform: translateY(0) scale(1); } }
+        .upload-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; border-bottom: 1px solid rgba(105, 129, 141, 0.2); }
+        .upload-modal-header h3 { margin: 0; color: var(--text-primary, #AFB3B7); font-size: 1.3rem; }
+        .upload-close-btn { background: none; border: none; color: var(--text-secondary, #69818D); font-size: 1.5rem; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .upload-close-btn:hover { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+        .upload-modal-body { padding: 1.5rem; }
+        .upload-dropzone { border: 2px dashed rgba(105, 129, 141, 0.4); border-radius: 16px; padding: 3rem 2rem; text-align: center; transition: all 0.3s ease; background: rgba(13, 31, 35, 0.5); cursor: pointer; }
+        .upload-dropzone:hover, .upload-dropzone.drag-over { border-color: #37a86e; background: rgba(55, 168, 110, 0.1); }
+        .upload-icon { font-size: 4rem; margin-bottom: 1rem; }
+        .upload-text { color: var(--text-primary, #AFB3B7); font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .upload-subtext { color: var(--text-secondary, #69818D); margin-bottom: 1rem; }
+        .upload-browse-btn { display: inline-block; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #2D4A53, #69818D); color: white; border-radius: 50px; cursor: pointer; font-weight: 600; }
+        .upload-file-info { margin-top: 1rem; }
+        .file-info-card { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: rgba(55, 168, 110, 0.1); border: 1px solid rgba(55, 168, 110, 0.3); border-radius: 12px; }
+        .file-icon { font-size: 2rem; }
+        .file-details { flex: 1; }
+        .filename { color: var(--text-primary, #AFB3B7); font-weight: 600; margin: 0; word-break: break-all; }
+        .filesize { color: var(--text-secondary, #69818D); font-size: 0.85rem; margin: 0.25rem 0 0 0; }
+        .remove-file-btn { background: rgba(255, 107, 107, 0.2); border: none; color: #ff6b6b; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
+        .upload-progress-container { margin-top: 1rem; }
+        .progress-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: var(--text-primary, #AFB3B7); }
+        .progress-bar-bg { height: 10px; background: rgba(105, 129, 141, 0.2); border-radius: 5px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #37a86e, #69818D); border-radius: 5px; transition: width 0.3s ease; }
+        .upload-speed { color: var(--text-secondary, #69818D); font-size: 0.85rem; margin-top: 0.5rem; text-align: center; }
+        .upload-result { margin-top: 1rem; padding: 1rem; border-radius: 12px; text-align: center; }
+        .upload-result.success { background: rgba(55, 168, 110, 0.2); border: 1px solid rgba(55, 168, 110, 0.4); color: #37a86e; }
+        .upload-result.error { background: rgba(255, 107, 107, 0.2); border: 1px solid rgba(255, 107, 107, 0.4); color: #ff6b6b; }
+        .upload-modal-footer { padding: 1rem 1.5rem 1.5rem; }
+        .upload-submit-btn { width: 100%; padding: 1rem; background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%); border: none; border-radius: 12px; color: white; font-size: 1.1rem; font-weight: 600; cursor: pointer; }
+        .upload-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        @media (max-width: 768px) { .upload-fab { bottom: 20px; right: 20px; width: 50px; height: 50px; } }
+    </style>
+
     <script>
-        // Create floating particles
-        function createParticles() {
-            const particlesContainer = document.getElementById('particles');
-            const particleCount = 30;
-            
-            for (let i = 0; i < particleCount; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.left = Math.random() * 100 + '%';
-                particle.style.top = Math.random() * 100 + '%';
-                particle.style.animationDelay = Math.random() * 15 + 's';
-                particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
-                particlesContainer.appendChild(particle);
+        let selectedFiles = [];
+        let isUploading = false;
+        
+        function openUploadModal() { 
+            const modal = document.getElementById('upload-modal'); 
+            modal.style.display = 'flex'; 
+            setTimeout(() => modal.classList.add('show'), 10); 
+        }
+        
+        function closeUploadModal() { 
+            if (isUploading) return;
+            const modal = document.getElementById('upload-modal'); 
+            modal.classList.remove('show'); 
+            setTimeout(() => { modal.style.display = 'none'; resetUploadForm(); }, 300); 
+        }
+        
+        function resetUploadForm() { 
+            selectedFiles = []; 
+            document.getElementById('file-input').value = ''; 
+            document.getElementById('upload-dropzone').style.display = 'block'; 
+            document.getElementById('upload-file-list').style.display = 'none';
+            document.getElementById('upload-file-list').innerHTML = '';
+            document.getElementById('upload-progress-container').style.display = 'none'; 
+            document.getElementById('upload-result').style.display = 'none'; 
+            document.getElementById('upload-btn').disabled = true;
+            document.getElementById('upload-btn').textContent = '📤 Upload';
+            isUploading = false;
+        }
+        
+        function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('upload-dropzone').classList.add('drag-over'); }
+        function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('upload-dropzone').classList.remove('drag-over'); }
+        
+        function handleDrop(e) { 
+            e.preventDefault(); e.stopPropagation(); 
+            document.getElementById('upload-dropzone').classList.remove('drag-over'); 
+            if (e.dataTransfer.files.length > 0) { addFiles(Array.from(e.dataTransfer.files)); } 
+        }
+        
+        function handleFileSelect(e) { 
+            if (e.target.files.length > 0) { addFiles(Array.from(e.target.files)); } 
+        }
+        
+        function addFiles(files) {
+            selectedFiles = [...selectedFiles, ...files];
+            renderFileList();
+            document.getElementById('upload-dropzone').style.display = 'none';
+            document.getElementById('upload-file-list').style.display = 'block';
+            document.getElementById('upload-btn').disabled = false;
+            document.getElementById('upload-result').style.display = 'none';
+        }
+        
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            if (selectedFiles.length === 0) {
+                resetUploadForm();
+                document.getElementById('upload-dropzone').style.display = 'block';
+            } else {
+                renderFileList();
             }
         }
         
-        createParticles();
+        function renderFileList() {
+            const container = document.getElementById('upload-file-list');
+            container.innerHTML = selectedFiles.map((file, i) => 
+                '<div style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem; background: rgba(55, 168, 110, 0.1); border: 1px solid rgba(55, 168, 110, 0.3); border-radius: 12px; margin-bottom: 0.5rem;">' +
+                    '<span style="font-size: 1.5rem;">📄</span>' +
+                    '<div style="flex: 1; overflow: hidden;">' +
+                        '<p style="color: var(--text-primary, #AFB3B7); font-weight: 600; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + file.name + '</p>' +
+                        '<p style="color: var(--text-secondary, #69818D); font-size: 0.85rem; margin: 0.25rem 0 0 0;">' + formatFileSize(file.size) + '</p>' +
+                    '</div>' +
+                    '<button onclick="removeFile(' + i + ')" style="background: rgba(255, 107, 107, 0.2); border: none; color: #ff6b6b; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-weight: bold;">✕</button>' +
+                '</div>'
+            ).join('');
+            container.innerHTML += '<p style="color: var(--text-secondary, #69818D); font-size: 0.85rem; text-align: center; margin-top: 0.5rem;">' + selectedFiles.length + ' file(s) selected • Total: ' + formatFileSize(selectedFiles.reduce((a,f) => a + f.size, 0)) + '</p>';
+        }
+        
+        function formatFileSize(bytes) { if (bytes === 0) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB', 'GB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; }
+        
+        async function startUpload() {
+            if (selectedFiles.length === 0 || isUploading) return;
+            isUploading = true;
+            
+            const uploadBtn = document.getElementById('upload-btn');
+            const progressContainer = document.getElementById('upload-progress-container');
+            const result = document.getElementById('upload-result');
+            const fileList = document.getElementById('upload-file-list');
+            
+            uploadBtn.disabled = true;
+            progressContainer.style.display = 'block';
+            fileList.style.display = 'none';
+            result.style.display = 'none';
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                document.getElementById('upload-status').textContent = 'Uploading ' + (i + 1) + ' of ' + selectedFiles.length + '...';
+                document.getElementById('upload-current-file').textContent = file.name;
+                uploadBtn.textContent = '⏳ ' + (i + 1) + '/' + selectedFiles.length;
+                
+                try {
+                    await uploadSingleFile(file);
+                    successCount++;
+                } catch (err) {
+                    console.error('Upload error:', file.name, err);
+                    failCount++;
+                }
+            }
+            
+            document.getElementById('upload-progress-container').style.display = 'none';
+            result.style.display = 'block';
+            
+            if (failCount === 0) {
+                result.className = 'upload-result success';
+                result.innerHTML = '✅ All ' + successCount + ' file(s) uploaded successfully! <br><small>Your files are now available in the <a href="/0:/User_Uploads/" style="color: #37a86e; font-weight: 600;">📁 User Uploads</a> folder.</small>';
+                uploadBtn.textContent = '✓ Done';
+                setTimeout(() => { resetUploadForm(); closeUploadModal(); }, 4000);
+            } else if (successCount > 0) {
+                result.className = 'upload-result';
+                result.style.background = 'rgba(255, 193, 7, 0.2)';
+                result.style.border = '1px solid rgba(255, 193, 7, 0.4)';
+                result.style.color = '#ffc107';
+                result.innerHTML = '⚠️ ' + successCount + ' uploaded, ' + failCount + ' failed';
+                uploadBtn.textContent = '📤 Upload';
+                uploadBtn.disabled = false;
+                isUploading = false;
+            } else {
+                result.className = 'upload-result error';
+                result.innerHTML = '❌ All uploads failed';
+                uploadBtn.textContent = '📤 Upload';
+                uploadBtn.disabled = false;
+                isUploading = false;
+            }
+        }
+        
+        function uploadSingleFile(file) {
+            return new Promise((resolve, reject) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const xhr = new XMLHttpRequest();
+                const startTime = Date.now();
+                const progressBar = document.getElementById('upload-progress-bar');
+                const percentage = document.getElementById('upload-percentage');
+                const speed = document.getElementById('upload-speed');
+                
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const progress = Math.round((e.loaded / e.total) * 100);
+                        progressBar.style.width = progress + '%';
+                        percentage.textContent = progress + '%';
+                        const elapsed = (Date.now() - startTime) / 1000;
+                        if (elapsed > 0) { speed.textContent = formatFileSize(e.loaded / elapsed) + '/s'; }
+                    }
+                });
+                
+                xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.success) { resolve(response); }
+                        else { reject(new Error(response.error || 'Upload failed')); }
+                    } else { reject(new Error('Upload failed: ' + xhr.status)); }
+                });
+                
+                xhr.addEventListener('error', () => { reject(new Error('Network error')); });
+                
+                xhr.open('POST', '/api/upload', true);
+                xhr.send(formData);
+            });
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ❄️ Create Christmas Snowfall Animation ❄️
+        function createSnowfall() {
+            const snowfallContainer = document.getElementById('snowfall');
+            const snowflakeCount = 50; // Number of snowflakes
+            const snowflakeChars = ['❄', '❅', '❆', '✻', '✼', '❋', '•'];
+            const sizes = ['small', 'medium', 'large'];
+            
+            for (let i = 0; i < snowflakeCount; i++) {
+                const snowflake = document.createElement('div');
+                snowflake.className = 'snowflake ' + sizes[Math.floor(Math.random() * sizes.length)];
+                snowflake.textContent = snowflakeChars[Math.floor(Math.random() * snowflakeChars.length)];
+                
+                // Random horizontal position
+                snowflake.style.left = Math.random() * 100 + '%';
+                
+                // Random animation duration (5-15 seconds for varied falling speeds)
+                const duration = Math.random() * 10 + 5;
+                snowflake.style.animationDuration = duration + 's';
+                
+                // Random delay so they don't all start at once
+                snowflake.style.animationDelay = Math.random() * 10 + 's';
+                
+                snowfallContainer.appendChild(snowflake);
+            }
+        }
+        
+        createSnowfall();
 
         // Mobile Menu Toggle
         const menuToggle = document.getElementById('menuToggle');
@@ -2657,7 +2649,7 @@ const homepage = `<!DOCTYPE html>
             }
             
             const drives = window.drive_names;
-            const driveIcons = ['📁', '🎓', '🎮', '🎬', '📺', '💼', '🎵', '📸', '📚', '🎨'];
+            const driveIcons = ['📁', '🎓', '🎮', '🎬', '📺', '💼', '👨‍💻', '📸', '📦', '🎨'];
             
             let html = '';
             for (let i = 0; i < drives.length; i++) {
@@ -5444,7 +5436,7 @@ const aboutus_html = `<!DOCTYPE html>
                         <a class="nav-link active" aria-current="page" href="/about">About</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="${uiConfig.contact_link}" target="_blank">Contact</a>
+                        <a class="nav-link" href="/contact">Contact</a>
                     </li>
                 </ul>
             </div>
@@ -5514,7 +5506,7 @@ const aboutus_html = `<!DOCTYPE html>
                     </div>
                     <div class="contact-info">
                         <h4>GitHub Repository</h4>
-                        <p><a href="https://github.com/shohan-001/Gdrive-Index" target="_blank">github.com/shohan-001/Gdrive-Index</a></p>
+                        <p><a href="https://github.com/shohan-001/enhanced-gdrive-index" target="_blank">github.com/shohan-001/Gdrive-Index</a></p>
                     </div>
                 </div>
 
@@ -5679,8 +5671,8 @@ const aboutus_html = `<!DOCTYPE html>
         <p>
             <a href="/" class="footer-link">Home</a>
             <a href="/about" class="footer-link">About</a>
-            <a href="${uiConfig.contact_link}" target="_blank" class="footer-link">Contact</a>
-            <a href="https://github.com/shohan-001/Gdrive-Index" target="_blank" class="footer-link">GitHub</a>
+            <a href="/contact" class="footer-link">Contact</a>
+            <a href="https://github.com/shohan-001/enhanced-gdrive-index" target="_blank" class="footer-link">GitHub</a>
         </p>
         <p style="margin-top: 15px; font-size: 0.85rem;">
             Built with using Cloudflare Workers & Google Drive API
@@ -5739,6 +5731,739 @@ const aboutus_html = `<!DOCTYPE html>
             el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
             observer.observe(el);
         });
+    </script>
+</body>
+</html>`;
+
+// Modern Contact Page with Telegram Integration (cw-gram.js style)
+const contact_html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>Contact Us - ${authConfig.siteName}</title>
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="${uiConfig.favicon}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --darkest-bg: #0D1F23;
+            --dark-teal: #132E35;
+            --muted-blue: #2D4A53;
+            --dusty-blue: #69818D;
+            --light-gray-blue: #AFB3B7;
+            --slate-gray: #5A636A;
+            --bg-primary: var(--darkest-bg);
+            --bg-secondary: var(--dark-teal);
+            --glass-bg: rgba(19, 46, 53, 0.7);
+            --glass-border: rgba(105, 129, 141, 0.2);
+            --text-primary: var(--light-gray-blue);
+            --text-secondary: var(--dusty-blue);
+            --accent-main: var(--muted-blue);
+            --accent-light: var(--dusty-blue);
+            --shadow-color: rgba(45, 74, 83, 0.4);
+            --success-color: #37a86e;
+            --error-color: #ff6b6b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at 10% 20%, rgba(45, 74, 83, 0.2) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(20, 50, 60, 0.3) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(105, 129, 141, 0.15) 0%, transparent 50%);
+            z-index: 0;
+            animation: backgroundShift 20s ease infinite;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 1; }
+            50% { transform: translate(50px, -50px) scale(1.1); opacity: 0.8; }
+        }
+
+        /* Snowfall Animation */
+        .snowfall-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .snowflake {
+            position: absolute;
+            top: -20px;
+            color: #fff;
+            font-size: 1rem;
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+            opacity: 0.9;
+            animation: snowfall linear infinite;
+            will-change: transform;
+        }
+
+        .snowflake.small { font-size: 0.6rem; opacity: 0.6; }
+        .snowflake.medium { font-size: 1rem; opacity: 0.8; }
+        .snowflake.large { font-size: 1.4rem; opacity: 1; }
+
+        @keyframes snowfall {
+            0% { transform: translateY(-20px) rotate(0deg) translateX(0); }
+            25% { transform: translateY(25vh) rotate(90deg) translateX(15px); }
+            50% { transform: translateY(50vh) rotate(180deg) translateX(-15px); }
+            75% { transform: translateY(75vh) rotate(270deg) translateX(10px); }
+            100% { transform: translateY(105vh) rotate(360deg) translateX(-5px); }
+        }
+
+        /* Navbar */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 1rem 2rem;
+            background: rgba(19, 46, 53, 0.7);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border-bottom: 1px solid var(--glass-border);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .navbar.scrolled {
+            padding: 0.5rem 2rem;
+            background: rgba(19, 46, 53, 0.95);
+        }
+
+        .navbar-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            text-decoration: none;
+        }
+
+        .logo-img {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            box-shadow: 0 0 20px var(--shadow-color);
+            animation: logoFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            padding: 0.75rem 1.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--text-primary);
+            background: rgba(105, 129, 141, 0.1);
+        }
+
+        .menu-toggle {
+            display: none;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        /* Main Content */
+        .main-content {
+            position: relative;
+            z-index: 2;
+            padding: 120px 20px 60px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .page-title {
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-light) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+            animation: titleFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes titleFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .page-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Contact Grid */
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            margin-top: 2rem;
+        }
+
+        /* Contact Form */
+        .contact-form-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .form-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .form-input, .form-textarea {
+            width: 100%;
+            padding: 1rem 1.25rem;
+            background: rgba(13, 31, 35, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--accent-main);
+            box-shadow: 0 0 20px var(--shadow-color);
+            background: rgba(13, 31, 35, 0.8);
+        }
+
+        .form-input::placeholder, .form-textarea::placeholder {
+            color: var(--slate-gray);
+        }
+
+        .form-textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--accent-main), var(--accent-light));
+            border: none;
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px var(--shadow-color);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .submit-btn .btn-text { position: relative; z-index: 1; }
+
+        .submit-btn .loading-spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .submit-btn.loading .btn-text { display: none; }
+        .submit-btn.loading .loading-spinner { display: inline-block; }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Message Box */
+        .message-box {
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .message-box.show { display: block; }
+
+        .message-box.success {
+            background: rgba(55, 168, 110, 0.2);
+            border: 1px solid var(--success-color);
+            color: var(--success-color);
+        }
+
+        .message-box.error {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid var(--error-color);
+            color: var(--error-color);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Contact Info Card */
+        .contact-info-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .info-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .contact-method {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.25rem;
+            background: rgba(45, 74, 83, 0.3);
+            border-radius: 16px;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .contact-method:hover {
+            background: rgba(45, 74, 83, 0.5);
+            transform: translateX(5px);
+        }
+
+        .method-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--accent-main), var(--accent-light));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .method-info h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .method-info p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        /* Response Time Card */
+        .response-card {
+            background: rgba(55, 168, 110, 0.1);
+            border: 1px solid rgba(55, 168, 110, 0.3);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+
+        .response-card i {
+            font-size: 2rem;
+            color: var(--success-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .response-card h4 {
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .response-card p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid var(--glass-border);
+            padding: 2rem;
+            text-align: center;
+            margin-top: 4rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .footer-link:hover {
+            color: var(--accent-light);
+        }
+
+        .footer-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .contact-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar { padding: 1rem; }
+            .menu-toggle { display: block; }
+            .nav-links {
+                position: fixed;
+                top: 80px;
+                left: 0;
+                right: 0;
+                background: rgba(19, 46, 53, 0.95);
+                backdrop-filter: blur(20px);
+                flex-direction: column;
+                padding: 2rem;
+                transform: translateY(-100%);
+                opacity: 0;
+                pointer-events: none;
+                transition: all 0.3s ease;
+            }
+            .nav-links.active {
+                transform: translateY(0);
+                opacity: 1;
+                pointer-events: all;
+            }
+            .contact-form-card, .contact-info-card {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="snowfall-container" id="snowfall"></div>
+
+    <nav class="navbar" id="navbar">
+        <div class="navbar-content">
+            <a href="/" class="logo-section">
+                <img src="https://files.catbox.moe/hfjlrl.png" alt="Logo" class="logo-img">
+            </a>
+            
+            <button class="menu-toggle" id="menuToggle">☰</button>
+            
+            <div class="nav-links" id="navLinks">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/about" class="nav-link">About</a>
+                <a href="/contact" class="nav-link active">Contact</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="page-header">
+            <h1 class="page-title">📬 Get In Touch</h1>
+            <p class="page-subtitle">Have a question or feedback? We'd love to hear from you. Send us a message and we'll respond as soon as possible.</p>
+        </div>
+
+        <div class="contact-grid">
+            <div class="contact-form-card">
+                <h2 class="form-title">Send a Message</h2>
+                
+                <div class="message-box" id="messageBox"></div>
+                
+                <form id="contactForm" onsubmit="handleSubmit(event)">
+                    <div class="form-group">
+                        <label class="form-label" for="name">Your Name *</label>
+                        <input type="text" id="name" name="name" class="form-input" placeholder="John Doe" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="email">Email Address *</label>
+                        <input type="email" id="email" name="email" class="form-input" placeholder="john@example.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="subject">Subject *</label>
+                        <input type="text" id="subject" name="subject" class="form-input" placeholder="How can we help?" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="message">Message *</label>
+                        <textarea id="message" name="message" class="form-textarea" placeholder="Write your message here..." required></textarea>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn" id="submitBtn">
+                        <span class="btn-text">Send Message</span>
+                        <span class="loading-spinner"></span>
+                    </button>
+                </form>
+            </div>
+            
+            <div class="contact-info-card">
+                <h2 class="info-title">Other Ways to Reach Us</h2>
+                
+                <a href="https://t.me/Shohan_max" target="_blank" class="contact-method">
+                    <div class="method-icon"><i class="bi bi-telegram"></i></div>
+                    <div class="method-info">
+                        <h4>Telegram</h4>
+                        <p>@Shohan_max</p>
+                    </div>
+                </a>
+                
+                <a href="mailto:support@iswvoid.me" class="contact-method">
+                    <div class="method-icon"><i class="bi bi-envelope-fill"></i></div>
+                    <div class="method-info">
+                        <h4>Email</h4>
+                        <p>support@iswvoid.me</p>
+                    </div>
+                </a>
+                
+                <a href="https://discord.gg/iswvoid" target="_blank" class="contact-method">
+                    <div class="method-icon"><i class="bi bi-discord"></i></div>
+                    <div class="method-info">
+                        <h4>Discord</h4>
+                        <p>Join our community</p>
+                    </div>
+                </a>
+                
+                <a href="https://github.com/shohan-001/enhanced-gdrive-index" target="_blank" class="contact-method">
+                    <div class="method-icon"><i class="bi bi-github"></i></div>
+                    <div class="method-info">
+                        <h4>GitHub</h4>
+                        <p>Report issues & contribute</p>
+                    </div>
+                </a>
+                
+                <div class="response-card">
+                    <i class="bi bi-clock-history"></i>
+                    <h4>Fast Response</h4>
+                    <p>We typically reply within 24-48 hours</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-links">
+            <a href="/" class="footer-link">Home</a>
+            <a href="/about" class="footer-link">About</a>
+            <a href="/contact" class="footer-link">Contact</a>
+            <a href="https://github.com/shohan-001/enhanced-gdrive-index" target="_blank" class="footer-link">GitHub</a>
+        </div>
+        <p class="footer-text">&copy; ${uiConfig.copyright_year} ${authConfig.siteName}. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        const menuToggle = document.getElementById('menuToggle');
+        const navLinks = document.getElementById('navLinks');
+        menuToggle.addEventListener('click', () => {
+            navLinks.classList.toggle('active');
+            menuToggle.textContent = navLinks.classList.contains('active') ? '✕' : '☰';
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const navbar = document.getElementById('navbar');
+            navbar.classList.toggle('scrolled', window.scrollY > 50);
+        });
+
+        // Snowfall effect
+        function createSnowfall() {
+            const container = document.getElementById('snowfall');
+            const snowflakes = ['❄', '❅', '❆', '✧', '✦'];
+            
+            for (let i = 0; i < 50; i++) {
+                const snowflake = document.createElement('div');
+                snowflake.className = 'snowflake ' + ['small', 'medium', 'large'][Math.floor(Math.random() * 3)];
+                snowflake.textContent = snowflakes[Math.floor(Math.random() * snowflakes.length)];
+                snowflake.style.left = Math.random() * 100 + '%';
+                snowflake.style.animationDuration = (Math.random() * 10 + 10) + 's';
+                snowflake.style.animationDelay = (Math.random() * 10) + 's';
+                container.appendChild(snowflake);
+            }
+        }
+        createSnowfall();
+
+        // Form submission
+        function handleSubmit(event) {
+            event.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const messageBox = document.getElementById('messageBox');
+            
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const subject = document.getElementById('subject').value.trim();
+            const message = document.getElementById('message').value.trim();
+            
+            // Validation
+            if (!name || !email || !subject || !message) {
+                showMessage('Please fill in all fields.', 'error');
+                return;
+            }
+            
+            if (!isValidEmail(email)) {
+                showMessage('Please enter a valid email address.', 'error');
+                return;
+            }
+            
+            // Show loading state
+            submitBtn.classList.add('loading');
+            submitBtn.disabled = true;
+            
+            // Send to API
+            fetch('/api/contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, subject, msg: message })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.ok) {
+                    showMessage('Message sent successfully! We\\'ll get back to you soon.', 'success');
+                    document.getElementById('contactForm').reset();
+                } else {
+                    showMessage(data.error || 'Failed to send message. Please try again.', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Connection error. Please try again later.', 'error');
+            })
+            .finally(() => {
+                submitBtn.classList.remove('loading');
+                submitBtn.disabled = false;
+            });
+        }
+        
+        function showMessage(text, type) {
+            const messageBox = document.getElementById('messageBox');
+            messageBox.textContent = text;
+            messageBox.className = 'message-box ' + type + ' show';
+            
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, 5000);
+        }
+        
+        function isValidEmail(email) {
+            var at = email.indexOf('@');
+            var dot = email.lastIndexOf('.');
+            return at > 0 && dot > at + 1 && dot < email.length - 1;
+        }
     </script>
 </body>
 </html>`;
@@ -6022,6 +6747,7 @@ async function handleRequest(request, event) {
     }
     // --- END UPLOAD API ROUTES ---
 
+
     if (path == '/app.js') {
         const js = await fetch('https://gitlab.com/GoogleDriveIndex/Google-Drive-Index/-/raw/dev/src/app.js', {
             method: 'GET',
@@ -6053,6 +6779,105 @@ async function handleRequest(request, event) {
                 'Content-Type': 'text/html; charset=utf-8'
             }
         });
+    }
+
+    // Contact Page Route
+    if (path == '/contact') {
+        return new Response(contact_html, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/html; charset=utf-8'
+            }
+        });
+    }
+
+    // Contact Form API (cw-gram.js style - sends to Telegram)
+    if (path == '/api/contact' && request.method === 'POST') {
+        try {
+            const data = await request.json();
+            const { name, email, subject, msg } = data;
+
+            // Validate required fields
+            if (!name || !email || !subject || !msg) {
+                return new Response(JSON.stringify({ ok: false, error: 'All fields are required' }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            // Email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return new Response(JSON.stringify({ ok: false, error: 'Invalid email address' }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            // Get Telegram credentials from environment variables
+            const botToken = typeof BOT_TOKEN !== 'undefined' ? BOT_TOKEN : null;
+            const toId = typeof TO_ID !== 'undefined' ? TO_ID : null;
+
+            if (!botToken || !toId) {
+                // Log the message locally if Telegram is not configured
+                console.log('Contact Form Submission:', { name, email, subject, msg });
+                await logActivity('CONTACT_FORM', 'anonymous', request, { name, email, subject, msg });
+
+                return new Response(JSON.stringify({
+                    ok: true,
+                    message: 'Message received! We will get back to you soon.'
+                }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            // Format message for Telegram (HTML parse mode)
+            const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const telegramMessage = `📬 <b>New Contact Form Message</b>
+
+<b>👤 Name:</b> ${escapeHtml(name)}
+<b>📧 Email:</b> ${escapeHtml(email)}
+<b>📋 Subject:</b> ${escapeHtml(subject)}
+
+<b>💬 Message:</b>
+${escapeHtml(msg)}
+
+<i>Sent from ${authConfig.siteName} Contact Form</i>`;
+
+            // Send to Telegram
+            const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: toId,
+                    text: telegramMessage,
+                    parse_mode: 'HTML'
+                })
+            });
+
+            const telegramResult = await telegramResponse.json();
+
+            if (telegramResult.ok) {
+                await logActivity('CONTACT_FORM_SENT', 'anonymous', request, { name, email, subject });
+                return new Response(JSON.stringify({ ok: true, message: 'Message sent successfully!' }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            } else {
+                console.error('Telegram API Error:', telegramResult);
+                return new Response(JSON.stringify({ ok: false, error: 'Failed to send message. Please try again.' }), {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+        } catch (error) {
+            console.error('Contact Form Error:', error);
+            return new Response(JSON.stringify({ ok: false, error: 'Server error. Please try again later.' }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
     }
 
     if (path == '/findpath') {
