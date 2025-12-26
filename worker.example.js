@@ -5804,40 +5804,6 @@ const contact_html = `<!DOCTYPE html>
             50% { transform: translate(50px, -50px) scale(1.1); opacity: 0.8; }
         }
 
-        /* Snowfall Animation */
-        .snowfall-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            pointer-events: none;
-            overflow: hidden;
-        }
-
-        .snowflake {
-            position: absolute;
-            top: -20px;
-            color: #fff;
-            font-size: 1rem;
-            text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
-            opacity: 0.9;
-            animation: snowfall linear infinite;
-            will-change: transform;
-        }
-
-        .snowflake.small { font-size: 0.6rem; opacity: 0.6; }
-        .snowflake.medium { font-size: 1rem; opacity: 0.8; }
-        .snowflake.large { font-size: 1.4rem; opacity: 1; }
-
-        @keyframes snowfall {
-            0% { transform: translateY(-20px) rotate(0deg) translateX(0); }
-            25% { transform: translateY(25vh) rotate(90deg) translateX(15px); }
-            50% { transform: translateY(50vh) rotate(180deg) translateX(-15px); }
-            75% { transform: translateY(75vh) rotate(270deg) translateX(10px); }
-            100% { transform: translateY(105vh) rotate(360deg) translateX(-5px); }
-        }
 
         /* Navbar */
         .navbar {
@@ -6253,8 +6219,6 @@ const contact_html = `<!DOCTYPE html>
     </style>
 </head>
 <body>
-    <div class="snowfall-container" id="snowfall"></div>
-
     <nav class="navbar" id="navbar">
         <div class="navbar-content">
             <a href="/" class="logo-section">
@@ -6379,23 +6343,6 @@ const contact_html = `<!DOCTYPE html>
             const navbar = document.getElementById('navbar');
             navbar.classList.toggle('scrolled', window.scrollY > 50);
         });
-
-        // Snowfall effect
-        function createSnowfall() {
-            const container = document.getElementById('snowfall');
-            const snowflakes = ['❄', '❅', '❆', '✧', '✦'];
-            
-            for (let i = 0; i < 50; i++) {
-                const snowflake = document.createElement('div');
-                snowflake.className = 'snowflake ' + ['small', 'medium', 'large'][Math.floor(Math.random() * 3)];
-                snowflake.textContent = snowflakes[Math.floor(Math.random() * snowflakes.length)];
-                snowflake.style.left = Math.random() * 100 + '%';
-                snowflake.style.animationDuration = (Math.random() * 10 + 10) + 's';
-                snowflake.style.animationDelay = (Math.random() * 10) + 's';
-                container.appendChild(snowflake);
-            }
-        }
-        createSnowfall();
 
         // Form submission
         function handleSubmit(event) {
