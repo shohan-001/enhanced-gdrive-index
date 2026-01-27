@@ -100,6 +100,30 @@ Search across all configured drives instantly.
 
 ---
 
+### 🤖 Telegram Admin Bot
+
+Control your index directly from Telegram with admin notifications and user management.
+
+| Command | Description |
+|---------|-------------|
+| `/approve <user>` | Approve pending user |
+| `/block <user>` | Block user |
+| `/pending` | List pending signups with approve/block buttons |
+| `/loginnotify` | Toggle login notifications |
+| `/logs` | Show recent activity logs |
+| `/logs_type <type>` | Filter logs by type |
+| `/logs_delete_old <days>` | Delete logs older than N days |
+| `/logs_delete_type <type>` | Delete logs by type |
+| `/logs_delete_all` | Delete all logs |
+
+**Features:**
+- 🔔 Instant notifications for new signups
+- ✅ Approve/Block users with inline keyboard buttons
+- 📊 View activity logs from Telegram
+- 🔐 Optional login notifications
+
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -163,7 +187,7 @@ Planned features for future releases:
 - [ ] User activity graphs
 - [ ] Export logs as CSV/JSON
 - [ ] Bulk user actions
-- [ ] Email notifications on new signups
+- [x] Telegram notifications on new signups
 
 ### 📁 File Management
 - [x] File upload to Google Drive

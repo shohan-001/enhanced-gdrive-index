@@ -253,6 +253,64 @@ const blocked_asn = [12345, 67890];   // ASN numbers
 
 ---
 
+## 🤖 Telegram Bot Setup (Optional)
+
+The Telegram bot allows you to manage users and receive notifications directly from Telegram.
+
+### 1. Create Bot via BotFather
+
+1. Open Telegram and search for [@BotFather](https://t.me/BotFather)
+2. Send `/newbot` and follow prompts to create your bot
+3. Save your **Bot Token** (looks like `123456789:AABBcc...`)
+4. Send `/setcommands` to BotFather, select your bot, then paste:
+
+```
+approve - Approve pending user
+block - Block user
+pending - List pending signups
+loginnotify - Toggle login notifications
+logs - Show recent activity logs
+logs_type - Filter logs by type
+logs_delete_old - Delete old logs by age
+logs_delete_type - Delete logs by type
+logs_delete_all - Delete all logs
+```
+
+### 2. Get Your Chat ID
+
+1. Send any message to your new bot
+2. Open this URL in browser (replace `YOUR_BOT_TOKEN`):
+   ```
+   https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+   ```
+3. Find `"chat":{"id":123456789}` - this number is your `TO_ID`
+
+### 3. Set Environment Variables
+
+In Cloudflare Worker settings → Variables:
+- **`BOT_TOKEN`**: Your bot token from BotFather
+- **`TO_ID`**: Your Telegram chat ID (from step 2)
+
+> ⚠️ **Important**: Add these as encrypted secrets, not plain text variables.
+
+### 4. Set Webhook
+
+After deploying your worker, set the webhook by opening this URL once:
+
+```
+https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://YOUR_WORKER_DOMAIN/telegram
+```
+
+Replace:
+- `<BOT_TOKEN>` with your bot token
+- `YOUR_WORKER_DOMAIN` with your Cloudflare Worker domain
+
+### 5. Verify Connection
+
+Send `/pending` to your bot - you should get a response!
+
+---
+
 ## ✅ Deployment Checklist
 
 - [ ] Google Cloud project created
@@ -265,3 +323,6 @@ const blocked_asn = [12345, 67890];   // ASN numbers
 - [ ] Worker deployed
 - [ ] KV binding configured
 - [ ] Test login working
+- [ ] (Optional) Telegram bot configured
+- [ ] (Optional) Webhook set for Telegram
+

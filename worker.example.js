@@ -18,6 +18,8 @@ const blocked_asn = []; // add ASN numbers from http://www.bgplookingglass.com/l
 const USER_PREFIX = 'USER:';
 const LOG_PREFIX = 'LOG:';
 const ADMIN_KEY = 'ADMIN_USERS';
+const APPROVAL_TOKEN_PREFIX = 'APPROVAL_TOKEN:'; // one-time tokens for approval links
+const LOGIN_NOTIFY_KEY = 'LOGIN_NOTIFY_ENABLED'; // KV flag for Telegram login notifications
 
 const authConfig = {
     "siteName": "YOUR_SITE_NAME", // Website name
@@ -80,7 +82,7 @@ const hmac_base_key = "4d1fbf294186b82d74fff2494c04012364200263d6a36123db0bd08d6
 const encrypt_iv = new Uint8Array([247, 254, 106, 195, 32, 148, 131, 244, 222, 133, 26, 182, 20, 138, 215, 81]); // Example 128 bit IV used, generate your own.
 const uiConfig = {
     "theme": "darkly", // switch between themes, default set to slate, select from https://gitlab.com/GoogleDriveIndex/Google-Drive-Index
-    "version": "2.3.7", // don't touch this one. get latest code using generator at https://bdi-generator.hashhackers.com
+    "version": "2.7.0", // don't touch this one. get latest code using generator at https://bdi-generator.hashhackers.com
     "logo_image": true,
     "logo_height": "50px",
     "logo_width": "auto",
@@ -202,6 +204,486 @@ async function logActivity(type, username, request, details = {}) {
         await ENV.put(key, JSON.stringify(logEntry));
     } catch (e) {
         console.error("KV Logging Error:", e);
+    }
+}
+
+// --- TELEGRAM + APPROVAL HELPERS ---
+
+function escapeHtml(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function bytesToHex(bytes) {
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function generateRandomToken(byteLength = 16) {
+    const bytes = new Uint8Array(byteLength);
+    crypto.getRandomValues(bytes);
+    return bytesToHex(bytes);
+}
+
+async function sendTelegramMessage(text, { parseMode = 'HTML', disableWebPreview = true, chatId = null, replyMarkup = null } = {}) {
+    const botToken = typeof BOT_TOKEN !== 'undefined' ? BOT_TOKEN : null;
+    const toId = typeof TO_ID !== 'undefined' ? TO_ID : null;
+    if (!botToken || !toId) return { ok: false, skipped: true, reason: 'Telegram not configured' };
+
+    const finalChatId = chatId || toId;
+
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: finalChatId,
+            text,
+            parse_mode: parseMode,
+            disable_web_page_preview: disableWebPreview,
+            reply_markup: replyMarkup || undefined
+        })
+    });
+    return await telegramResponse.json();
+}
+
+async function createApprovalTokenForUser(username) {
+    const token = generateRandomToken(16);
+    const record = {
+        username,
+        created_at: Date.now(),
+        used: false,
+    };
+    await ENV.put(APPROVAL_TOKEN_PREFIX + token, JSON.stringify(record));
+    return token;
+}
+
+async function consumeApprovalToken(token) {
+    const key = APPROVAL_TOKEN_PREFIX + token;
+    const record = await ENV.get(key, 'json');
+    if (!record || record.used) return null;
+
+    // Token expiry (7 days)
+    const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+    if (record.created_at && (Date.now() - record.created_at) > maxAgeMs) {
+        // Mark used to prevent reuse even if expired
+        record.used = true;
+        await ENV.put(key, JSON.stringify(record));
+        return null;
+    }
+
+    record.used = true;
+    record.used_at = Date.now();
+    await ENV.put(key, JSON.stringify(record));
+    return record;
+}
+
+async function isLoginNotifyEnabled() {
+    try {
+        const value = await ENV.get(LOGIN_NOTIFY_KEY, 'text');
+        if (value === null || value === undefined) return false;
+        return value === 'true';
+    } catch (e) {
+        console.error('Error reading login notify flag:', e);
+        return false;
+    }
+}
+
+async function setLoginNotifyEnabled(enabled) {
+    try {
+        await ENV.put(LOGIN_NOTIFY_KEY, enabled ? 'true' : 'false');
+    } catch (e) {
+        console.error('Error writing login notify flag:', e);
+    }
+}
+
+async function handleTelegramUpdate(request) {
+    const botToken = typeof BOT_TOKEN !== 'undefined' ? BOT_TOKEN : null;
+    const toId = typeof TO_ID !== 'undefined' ? TO_ID : null;
+    if (!botToken || !toId) {
+        return new Response('Telegram not configured', { status: 500 });
+    }
+
+    try {
+        const update = await request.json();
+        const callback = update.callback_query;
+        const message = update.message || update.edited_message || (callback && callback.message);
+
+        // Nothing useful
+        if (!message && !callback) {
+            return new Response('OK', { status: 200 });
+        }
+
+        const chatId = String(
+            (message && message.chat && message.chat.id) ||
+            (callback && callback.message && callback.message.chat && callback.message.chat.id) ||
+            ''
+        );
+        const fromId = String(
+            (message && message.from && message.from.id) ||
+            (callback && callback.from && callback.from.id) ||
+            ''
+        );
+
+        // Only accept commands from the configured admin chat/user
+        if (String(toId) !== chatId && String(toId) !== fromId) {
+            console.log('Unauthorized Telegram user tried to use admin commands:', fromId, 'chat:', chatId);
+            return new Response('Ignored', { status: 200 });
+        }
+
+        // Handle inline keyboard callback buttons
+        if (callback && callback.data) {
+            const data = String(callback.data);
+            const [action, usernameRaw] = data.split(':', 2);
+            const username = (usernameRaw || '').trim();
+
+            if ((action === 'approve' || action === 'block') && username) {
+                const user = await getKVUser(username);
+                if (!user) {
+                    await sendTelegramMessage(
+                        `User <b>${escapeHtml(username)}</b> not found (from button).`,
+                        { parseMode: 'HTML', chatId }
+                    );
+                } else {
+                    const newStatus = action === 'approve' ? 'approved' : 'blocked';
+                    const oldStatus = user.status || 'unknown';
+                    user.status = newStatus;
+                    await setKVUser(username, user);
+
+                    await logActivity('USER_STATUS_CHANGE', 'telegram_bot', request, {
+                        from: oldStatus,
+                        to: newStatus,
+                        target_user: username,
+                        via: 'telegram_button'
+                    });
+                    if (newStatus === 'approved' && oldStatus === 'pending') {
+                        await logActivity('USER_APPROVED', 'telegram_bot', request, {
+                            target_user: username,
+                            via: 'telegram_button'
+                        });
+                    }
+
+                    await sendTelegramMessage(
+                        `✅ Button action: user <b>${escapeHtml(username)}</b> is now <b>${escapeHtml(newStatus)}</b>. (was <code>${escapeHtml(oldStatus)}</code>)`,
+                        { parseMode: 'HTML', chatId }
+                    );
+                }
+
+                // Answer callback to remove "loading" state
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'login_notify') {
+                const currentlyEnabled = await isLoginNotifyEnabled();
+                const next = !currentlyEnabled;
+                await setLoginNotifyEnabled(next);
+
+                await sendTelegramMessage(
+                    `Login notifications are now <b>${next ? 'ENABLED' : 'DISABLED'}</b>.`,
+                    { parseMode: 'HTML', chatId }
+                );
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'approve_all') {
+                const allUsers = await listAllUsers();
+                const pending = allUsers.filter(u => u.status === 'pending');
+
+                if (!pending.length) {
+                    await sendTelegramMessage('No pending signups to approve 🎉', { chatId });
+                } else {
+                    let count = 0;
+                    for (const u of pending) {
+                        const oldStatus = u.status || 'unknown';
+                        u.status = 'approved';
+                        await setKVUser(u.username, u);
+                        count++;
+
+                        await logActivity('USER_STATUS_CHANGE', 'telegram_bot', request, {
+                            from: oldStatus,
+                            to: 'approved',
+                            target_user: u.username,
+                            via: 'telegram_button_approve_all'
+                        });
+                        if (oldStatus === 'pending') {
+                            await logActivity('USER_APPROVED', 'telegram_bot', request, {
+                                target_user: u.username,
+                                via: 'telegram_button_approve_all'
+                            });
+                        }
+                    }
+
+                    await sendTelegramMessage(
+                        `✅ Approved <b>${escapeHtml(String(count))}</b> pending user(s).`,
+                        { parseMode: 'HTML', chatId }
+                    );
+                }
+
+                // Answer callback to remove "loading" state
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+
+                return new Response('OK', { status: 200 });
+            }
+        }
+
+        if (!message || !message.text) {
+            return new Response('OK', { status: 200 });
+        }
+
+        const text = message.text.trim();
+        const [rawCmd, rawArg] = text.split(/\s+/, 2);
+        if (!rawCmd || !rawCmd.startsWith('/')) {
+            return new Response('OK', { status: 200 });
+        }
+
+        // Strip bot username from command if present (/approve@MyBot)
+        const cmd = rawCmd.split('@')[0].toLowerCase();
+        const username = rawArg ? rawArg.trim() : '';
+
+        if (cmd === '/approve' || cmd === '/block') {
+            if (!username) {
+                await sendTelegramMessage(
+                    `Usage:\n/approve <username>\n/block <username>`,
+                    { parseMode: 'HTML', chatId }
+                );
+                return new Response('OK', { status: 200 });
+            }
+
+            const user = await getKVUser(username);
+            if (!user) {
+                await sendTelegramMessage(
+                    `User <b>${escapeHtml(username)}</b> not found.`,
+                    { parseMode: 'HTML', chatId }
+                );
+                return new Response('OK', { status: 200 });
+            }
+
+            const newStatus = cmd === '/approve' ? 'approved' : 'blocked';
+            const oldStatus = user.status || 'unknown';
+            user.status = newStatus;
+            await setKVUser(username, user);
+
+            await logActivity('USER_STATUS_CHANGE', 'telegram_bot', request, {
+                from: oldStatus,
+                to: newStatus,
+                target_user: username,
+                via: 'telegram_command'
+            });
+            if (newStatus === 'approved' && oldStatus === 'pending') {
+                await logActivity('USER_APPROVED', 'telegram_bot', request, {
+                    target_user: username,
+                    via: 'telegram_command'
+                });
+            }
+
+            await sendTelegramMessage(
+                `User <b>${escapeHtml(username)}</b> status updated: <code>${escapeHtml(oldStatus)}</code> ➜ <b>${escapeHtml(newStatus)}</b>.`,
+                { parseMode: 'HTML', chatId }
+            );
+            return new Response('OK', { status: 200 });
+        }
+
+        if (cmd === '/pending') {
+            const allUsers = await listAllUsers();
+            const pending = allUsers.filter(u => u.status === 'pending').slice(0, 20);
+            if (!pending.length) {
+                await sendTelegramMessage('No pending signups 🎉', { chatId });
+            } else {
+                const lines = pending.map(
+                    (u, idx) => `${idx + 1}. <b>${escapeHtml(u.username)}</b> (${new Date(u.created_at).toLocaleString()})`
+                );
+
+                // Build inline keyboard: 1 row per user with generic Approve / Block labels
+                const keyboard = pending.map(u => ([
+                    { text: '✅ Approve', callback_data: `approve:${u.username}` },
+                    { text: '⛔ Block', callback_data: `block:${u.username}` }
+                ]));
+
+                // If more than one pending user, add an "Approve All" row
+                if (pending.length > 1) {
+                    keyboard.push([
+                        { text: '✅✅ Approve ALL pending users', callback_data: 'approve_all' }
+                    ]);
+                }
+
+                await sendTelegramMessage(
+                    `<b>Pending users (${pending.length}):</b>\n` + lines.join('\n'),
+                    {
+                        parseMode: 'HTML',
+                        chatId,
+                        replyMarkup: {
+                            inline_keyboard: keyboard
+                        }
+                    }
+                );
+            }
+            return new Response('OK', { status: 200 });
+        }
+
+        if (cmd === '/loginnotify') {
+            const enabled = await isLoginNotifyEnabled();
+            await sendTelegramMessage(
+                `Login notifications are currently <b>${enabled ? 'ENABLED' : 'DISABLED'}</b>.`,
+                {
+                    parseMode: 'HTML',
+                    chatId,
+                    replyMarkup: {
+                        inline_keyboard: [[
+                            {
+                                text: enabled ? '🔕 Disable login notifications' : '🔔 Enable login notifications',
+                                callback_data: 'login_notify'
+                            }
+                        ]]
+                    }
+                }
+            );
+            return new Response('OK', { status: 200 });
+        }
+
+        if (cmd === '/logs') {
+            const logs = await listAllLogs('');
+            const recent = logs.slice(0, 10);
+            if (!recent.length) {
+                await sendTelegramMessage('No logs stored yet.', { chatId });
+            } else {
+                const lines = recent.map(log => {
+                    const when = new Date(log.timestamp).toLocaleString();
+                    return `• <b>${escapeHtml(log.type)}</b> by <code>${escapeHtml(log.user || 'unknown')}</code> at ${escapeHtml(when)}`;
+                });
+                await sendTelegramMessage(
+                    `<b>Recent logs (${recent.length}):</b>\n` + lines.join('\n'),
+                    { parseMode: 'HTML', chatId }
+                );
+            }
+            return new Response('OK', { status: 200 });
+        }
+
+        if (cmd === '/logs_type') {
+            if (!username) {
+                await sendTelegramMessage(
+                    'Usage: <code>/logs_type LOG_TYPE</code>',
+                    { parseMode: 'HTML', chatId }
+                );
+                return new Response('OK', { status: 200 });
+            }
+            const type = rawArg.trim();
+            const logs = await listAllLogs(type);
+            const recent = logs.slice(0, 10);
+            if (!recent.length) {
+                await sendTelegramMessage(
+                    `No logs found for type <code>${escapeHtml(type)}</code>.`,
+                    { parseMode: 'HTML', chatId }
+                );
+            } else {
+                const lines = recent.map(log => {
+                    const when = new Date(log.timestamp).toLocaleString();
+                    return `• <b>${escapeHtml(log.type)}</b> by <code>${escapeHtml(log.user || 'unknown')}</code> at ${escapeHtml(when)}`;
+                });
+                await sendTelegramMessage(
+                    `<b>Logs of type <code>${escapeHtml(type)}</code> (${recent.length}):</b>\n` + lines.join('\n'),
+                    { parseMode: 'HTML', chatId }
+                );
+            }
+            return new Response('OK', { status: 200 });
+        }
+
+        if (cmd === '/logs_delete_old') {
+            const days = parseInt(rawArg || '0', 10);
+            if (!days || days < 0) {
+                await sendTelegramMessage(
+                    'Usage: <code>/logs_delete_old N</code> (N = days)',
+                    { parseMode: 'HTML', chatId }
+                );
+                return new Response('OK', { status: 200 });
+            }
+            const deletedCount = await deleteOldLogs(days);
+            await logActivity('ADMIN_LOG_CLEANUP', 'telegram_bot', request, {
+                action: 'deleteOld',
+                daysOld: days,
+                deletedCount
+            });
+            await sendTelegramMessage(
+                `🧹 Deleted <b>${escapeHtml(String(deletedCount))}</b> logs older than <b>${escapeHtml(String(days))}</b> days.`,
+                { parseMode: 'HTML', chatId }
+            );
+            return new Response('OK', { status: 200 });
+        }
+
+        if (cmd === '/logs_delete_type') {
+            const type = (rawArg || '').trim();
+            if (!type) {
+                await sendTelegramMessage(
+                    'Usage: <code>/logs_delete_type LOG_TYPE</code>',
+                    { parseMode: 'HTML', chatId }
+                );
+                return new Response('OK', { status: 200 });
+            }
+            const deletedCount = await deleteLogsByType(type);
+            await logActivity('ADMIN_LOG_CLEANUP', 'telegram_bot', request, {
+                action: 'deleteByType',
+                logType: type,
+                deletedCount
+            });
+            await sendTelegramMessage(
+                `🧹 Deleted <b>${escapeHtml(String(deletedCount))}</b> logs of type <code>${escapeHtml(type)}</code>.`,
+                { parseMode: 'HTML', chatId }
+            );
+            return new Response('OK', { status: 200 });
+        }
+
+        if (cmd === '/logs_delete_all') {
+            const deletedCount = await deleteOldLogs(0);
+            await logActivity('ADMIN_LOG_CLEANUP', 'telegram_bot', request, {
+                action: 'deleteAll',
+                deletedCount
+            });
+            await sendTelegramMessage(
+                `🧹 Deleted <b>${escapeHtml(String(deletedCount))}</b> activity logs (all).`,
+                { parseMode: 'HTML', chatId }
+            );
+            return new Response('OK', { status: 200 });
+        }
+
+        // Default help
+        await sendTelegramMessage(
+            `Available commands:\n/approve &lt;username&gt; – approve user\n/block &lt;username&gt; – block user\n/pending – list recent pending signups`,
+            { parseMode: 'HTML', chatId }
+        );
+        return new Response('OK', { status: 200 });
+    } catch (e) {
+        console.error('Telegram webhook error:', e);
+        return new Response('Error', { status: 500 });
     }
 }
 
@@ -1416,6 +1898,17 @@ function html(current_drive_order = 0, model = {}) {
     }
     
     function uploadSingleFile(file) {
+      const RESUMABLE_THRESHOLD = 5 * 1024 * 1024; // 5MB - use resumable for files larger than this
+      
+      if (file.size > RESUMABLE_THRESHOLD) {
+        return uploadResumable(file);
+      } else {
+        return uploadDirect(file);
+      }
+    }
+    
+    // Direct upload through worker - for small files (< 5MB)
+    function uploadDirect(file) {
       return new Promise((resolve, reject) => {
         const formData = new FormData();
         formData.append('file', file);
@@ -1448,6 +1941,71 @@ function html(current_drive_order = 0, model = {}) {
         
         xhr.open('POST', '/api/upload', true);
         xhr.send(formData);
+      });
+    }
+    
+    // Resumable upload - for large files (> 5MB)
+    // Uploads directly to Google Drive, bypassing worker memory limits
+    async function uploadResumable(file) {
+      const progressBar = document.getElementById('upload-progress-bar');
+      const percentage = document.getElementById('upload-percentage');
+      const speed = document.getElementById('upload-speed');
+      
+      // Step 1: Get resumable upload URL from our API
+      const initResponse = await fetch('/api/init-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          fileSize: file.size
+        })
+      });
+      
+      const initData = await initResponse.json();
+      if (!initData.success || !initData.uploadUrl) {
+        throw new Error(initData.error || 'Failed to initialize upload');
+      }
+      
+      // Step 2: Upload file directly to Google Drive using XHR for progress
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const startTime = Date.now();
+        
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const progress = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = progress + '%';
+            percentage.textContent = progress + '%';
+            const elapsed = (Date.now() - startTime) / 1000;
+            if (elapsed > 0) { 
+              speed.textContent = formatFileSize(e.loaded / elapsed) + '/s';
+            }
+          }
+        });
+        
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              resolve({ success: true, fileId: response.id, fileName: file.name });
+            } catch (e) {
+              // Google Drive might return non-JSON on success
+              resolve({ success: true, fileName: file.name });
+            }
+          } else {
+            reject(new Error('Upload failed: ' + xhr.status));
+          }
+        });
+        
+        xhr.addEventListener('error', () => { 
+          reject(new Error('Network error during upload')); 
+        });
+        
+        // Upload directly to Google Drive resumable URL
+        xhr.open('PUT', initData.uploadUrl, true);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.send(file);
       });
     }
   </script>
@@ -1595,7 +2153,7 @@ const homepage = `<!DOCTYPE html>
             50% { transform: translate(50px, -50px) scale(1.1); opacity: 0.8; }
         }
 
-        /* Floating Particles Animation */
+        /* ✨ Simple Floating Particles ✨ */
         .particles-container {
             position: fixed;
             top: 0;
@@ -1609,50 +2167,41 @@ const homepage = `<!DOCTYPE html>
 
         .particle {
             position: absolute;
-            width: 4px;
-            height: 4px;
-            background: var(--accent-light);
             border-radius: 50%;
-            opacity: 0.3;
-            animation: float linear infinite;
-            will-change: transform;
+            background: radial-gradient(circle, rgba(100, 200, 170, 0.8) 0%, rgba(100, 200, 170, 0) 70%);
+            animation: floatUp linear infinite;
         }
 
-        .particle.small {
-            width: 3px;
-            height: 3px;
-            opacity: 0.2;
+        .particle.style-1 {
+            background: radial-gradient(circle, rgba(55, 168, 110, 0.7) 0%, rgba(55, 168, 110, 0) 70%);
         }
 
-        .particle.medium {
-            width: 5px;
-            height: 5px;
-            opacity: 0.35;
+        .particle.style-2 {
+            background: radial-gradient(circle, rgba(100, 200, 180, 0.6) 0%, rgba(100, 200, 180, 0) 70%);
         }
 
-        .particle.large {
-            width: 6px;
-            height: 6px;
-            opacity: 0.4;
-            box-shadow: 0 0 10px var(--accent-light);
+        .particle.style-3 {
+            background: radial-gradient(circle, rgba(80, 160, 140, 0.5) 0%, rgba(80, 160, 140, 0) 70%);
         }
 
-        @keyframes float {
+        @keyframes floatUp {
             0% {
-                transform: translateY(100vh) translateX(0) scale(1);
+                transform: translateY(100vh) translateX(0) scale(0);
                 opacity: 0;
             }
-            10% {
-                opacity: 0.3;
+            5% {
+                opacity: 1;
+                transform: translateY(95vh) translateX(0) scale(1);
             }
             50% {
-                transform: translateY(50vh) translateX(30px) scale(1.1);
+                transform: translateY(50vh) translateX(20px) scale(1);
             }
-            90% {
-                opacity: 0.3;
+            95% {
+                opacity: 1;
+                transform: translateY(5vh) translateX(-10px) scale(1);
             }
             100% {
-                transform: translateY(-20px) translateX(-20px) scale(0.8);
+                transform: translateY(-5vh) translateX(0) scale(0);
                 opacity: 0;
             }
         }
@@ -1695,10 +2244,8 @@ const homepage = `<!DOCTYPE html>
         }
 
         .logo-img {
-            width: 60px;
-            height: 60px;
-            border-radius: 12px;
-            box-shadow: 0 0 20px var(--shadow-color);
+            height: 50px;
+            width: auto;
             animation: logoFloat 3s ease-in-out infinite;
             transition: transform 0.3s ease;
         }
@@ -2258,6 +2805,7 @@ const homepage = `<!DOCTYPE html>
                 <a href="/" class="nav-link active">Home</a>
                 <a href="/about" class="nav-link">About</a>
                 <a href="/contact" class="nav-link">Contact</a>
+                ${authConfig.enable_upload ? '<a href="/upload" class="nav-link">Upload</a>' : ''}
                 ${uiConfig.show_logout_button ? '<a href="/logout" class="nav-link">Logout</a>' : ''}
             </div>
         </div>
@@ -2311,16 +2859,6 @@ const homepage = `<!DOCTYPE html>
         </div>
     </footer>
 
-    <!-- Upload Button (Floating) -->
-    ${authConfig.enable_upload ? `
-    <button id="upload-fab" class="upload-fab" onclick="openUploadModal()" title="Upload File">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
-        </svg>
-    </button>
-    ` : ''}
-
     <!-- Upload Modal -->
     <div id="upload-modal" class="upload-modal" onclick="if(event.target===this)closeUploadModal()">
         <div class="upload-modal-content">
@@ -2363,7 +2901,7 @@ const homepage = `<!DOCTYPE html>
     </div>
 
     <style>
-        .upload-fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%); border: none; color: white; font-size: 1.5rem; cursor: pointer; box-shadow: 0 8px 32px rgba(55, 168, 110, 0.4); z-index: 1000; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; }
+        .upload-fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #37a86e 0%, #2D4A53 100%); border: none; color: white; font-size: 1.5rem; cursor: pointer; box-shadow: 0 8px 32px rgba(55, 168, 110, 0.4); z-index: 1000; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; text-decoration: none; }
         .upload-fab:hover { transform: translateY(-5px) scale(1.1); box-shadow: 0 12px 40px rgba(55, 168, 110, 0.6); }
         .upload-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(13, 31, 35, 0.9); backdrop-filter: blur(10px); z-index: 2000; opacity: 0; transition: opacity 0.3s ease; }
         .upload-modal.show { display: flex; align-items: center; justify-content: center; opacity: 1; }
@@ -2577,31 +3115,33 @@ const homepage = `<!DOCTYPE html>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Create Floating Particles Animation
-        function createParticles() {
+        // ✨ Simple Floating Particles ✨
+        (function() {
             const container = document.getElementById('particles');
-            const particleCount = 30;
-            const sizes = ['small', 'medium', 'large'];
+            const particleCount = 50;
+            const styles = ['style-1', 'style-2', 'style-3'];
             
             for (let i = 0; i < particleCount; i++) {
                 const particle = document.createElement('div');
-                particle.className = 'particle ' + sizes[Math.floor(Math.random() * sizes.length)];
+                particle.className = 'particle ' + styles[Math.floor(Math.random() * styles.length)];
+                
+                // Random size between 4px and 12px
+                const size = Math.random() * 8 + 4;
+                particle.style.width = size + 'px';
+                particle.style.height = size + 'px';
                 
                 // Random horizontal position
                 particle.style.left = Math.random() * 100 + '%';
                 
-                // Random animation duration (15-30 seconds for slow floating)
-                const duration = Math.random() * 15 + 15;
-                particle.style.animationDuration = duration + 's';
+                // Random animation duration (15-30 seconds)
+                particle.style.animationDuration = (Math.random() * 15 + 15) + 's';
                 
-                // Random delay
-                particle.style.animationDelay = Math.random() * 15 + 's';
+                // Random delay so particles don't all start together
+                particle.style.animationDelay = (Math.random() * 20) + 's';
                 
                 container.appendChild(particle);
             }
-        }
-        
-        createParticles();
+        })();
 
         // Mobile Menu Toggle
         const menuToggle = document.getElementById('menuToggle');
@@ -5801,6 +6341,40 @@ const contact_html = `<!DOCTYPE html>
             50% { transform: translate(50px, -50px) scale(1.1); opacity: 0.8; }
         }
 
+        /* Snowfall Animation */
+        .snowfall-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .snowflake {
+            position: absolute;
+            top: -20px;
+            color: #fff;
+            font-size: 1rem;
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+            opacity: 0.9;
+            animation: snowfall linear infinite;
+            will-change: transform;
+        }
+
+        .snowflake.small { font-size: 0.6rem; opacity: 0.6; }
+        .snowflake.medium { font-size: 1rem; opacity: 0.8; }
+        .snowflake.large { font-size: 1.4rem; opacity: 1; }
+
+        @keyframes snowfall {
+            0% { transform: translateY(-20px) rotate(0deg) translateX(0); }
+            25% { transform: translateY(25vh) rotate(90deg) translateX(15px); }
+            50% { transform: translateY(50vh) rotate(180deg) translateX(-15px); }
+            75% { transform: translateY(75vh) rotate(270deg) translateX(10px); }
+            100% { transform: translateY(105vh) rotate(360deg) translateX(-5px); }
+        }
 
         /* Navbar */
         .navbar {
@@ -6216,6 +6790,8 @@ const contact_html = `<!DOCTYPE html>
     </style>
 </head>
 <body>
+    <div class="snowfall-container" id="snowfall"></div>
+
     <nav class="navbar" id="navbar">
         <div class="navbar-content">
             <a href="/" class="logo-section">
@@ -6341,6 +6917,23 @@ const contact_html = `<!DOCTYPE html>
             navbar.classList.toggle('scrolled', window.scrollY > 50);
         });
 
+        // Snowfall effect
+        function createSnowfall() {
+            const container = document.getElementById('snowfall');
+            const snowflakes = ['❄', '❅', '❆', '✧', '✦'];
+            
+            for (let i = 0; i < 50; i++) {
+                const snowflake = document.createElement('div');
+                snowflake.className = 'snowflake ' + ['small', 'medium', 'large'][Math.floor(Math.random() * 3)];
+                snowflake.textContent = snowflakes[Math.floor(Math.random() * snowflakes.length)];
+                snowflake.style.left = Math.random() * 100 + '%';
+                snowflake.style.animationDuration = (Math.random() * 10 + 10) + 's';
+                snowflake.style.animationDelay = (Math.random() * 10) + 's';
+                container.appendChild(snowflake);
+            }
+        }
+        createSnowfall();
+
         // Form submission
         function handleSubmit(event) {
             event.preventDefault();
@@ -6409,6 +7002,820 @@ const contact_html = `<!DOCTYPE html>
             return at > 0 && dot > at + 1 && dot < email.length - 1;
         }
     </script>
+</body>
+</html>`;
+
+// --- DEDICATED UPLOAD PAGE HTML ---
+const upload_html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>Upload Files - ${authConfig.siteName}</title>
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="${uiConfig.favicon}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --darkest-bg: #0D1F23;
+            --dark-teal: #132E35;
+            --muted-blue: #2D4A53;
+            --dusty-blue: #69818D;
+            --light-gray-blue: #AFB3B7;
+            --slate-gray: #5A636A;
+            --bg-primary: var(--darkest-bg);
+            --bg-secondary: var(--dark-teal);
+            --glass-bg: rgba(19, 46, 53, 0.7);
+            --glass-border: rgba(105, 129, 141, 0.2);
+            --text-primary: var(--light-gray-blue);
+            --text-secondary: var(--dusty-blue);
+            --accent-main: var(--muted-blue);
+            --accent-light: var(--dusty-blue);
+            --shadow-color: rgba(45, 74, 83, 0.4);
+            --success-color: #37a86e;
+            --error-color: #ff6b6b;
+            --upload-accent: #37a86e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at 20% 50%, rgba(19, 46, 53, 0.4) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(45, 74, 83, 0.4) 0%, transparent 50%),
+                radial-gradient(ellipse at 40% 20%, rgba(55, 168, 110, 0.15) 0%, transparent 50%);
+            animation: backgroundShift 15s ease-in-out infinite;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+
+        /* Navbar */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            padding: 1rem 2rem;
+            background: rgba(19, 46, 53, 0.85);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .navbar-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .logo-img {
+            height: 45px;
+            width: auto;
+            transition: transform 0.3s ease;
+        }
+
+        .logo-img:hover {
+            transform: scale(1.05);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            padding: 0.75rem 1.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--text-primary);
+            background: rgba(105, 129, 141, 0.1);
+        }
+
+        .menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        /* Main Content */
+        .main-content {
+            position: relative;
+            z-index: 1;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .page-title {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--text-primary), var(--upload-accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .page-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Upload Card */
+        .upload-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 20px 60px var(--shadow-color);
+        }
+
+        /* Dropzone */
+        .dropzone {
+            border: 2px dashed var(--glass-border);
+            border-radius: 16px;
+            padding: 3rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(13, 31, 35, 0.4);
+        }
+
+        .dropzone:hover, .dropzone.drag-over {
+            border-color: var(--upload-accent);
+            background: rgba(55, 168, 110, 0.1);
+        }
+
+        .dropzone-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .dropzone-text {
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .dropzone-subtext {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .browse-btn {
+            display: inline-block;
+            padding: 0.75rem 2rem;
+            background: linear-gradient(135deg, var(--accent-main), var(--accent-light));
+            color: white;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .browse-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px var(--shadow-color);
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        /* File List */
+        .file-list {
+            display: none;
+            margin-top: 1.5rem;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(55, 168, 110, 0.1);
+            border: 1px solid rgba(55, 168, 110, 0.3);
+            border-radius: 12px;
+            margin-bottom: 0.75rem;
+        }
+
+        .file-item-icon {
+            font-size: 2rem;
+        }
+
+        .file-item-details {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .file-item-name {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-item-size {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin: 0.25rem 0 0 0;
+        }
+
+        .file-item-remove {
+            background: rgba(255, 107, 107, 0.2);
+            border: none;
+            color: #ff6b6b;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .file-item-remove:hover {
+            background: rgba(255, 107, 107, 0.4);
+            transform: scale(1.1);
+        }
+
+        .file-summary {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-align: center;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--glass-border);
+        }
+
+        /* Progress */
+        .progress-container {
+            display: none;
+            margin-top: 1.5rem;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .progress-bar-bg {
+            height: 12px;
+            background: rgba(105, 129, 141, 0.2);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--upload-accent), var(--accent-light));
+            border-radius: 6px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-status {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-top: 0.75rem;
+            text-align: center;
+        }
+
+        /* Result Message */
+        .result-message {
+            display: none;
+            margin-top: 1.5rem;
+            padding: 1.25rem;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .result-message.success {
+            background: rgba(55, 168, 110, 0.2);
+            border: 1px solid rgba(55, 168, 110, 0.4);
+            color: var(--upload-accent);
+        }
+
+        .result-message.error {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid rgba(255, 107, 107, 0.4);
+            color: #ff6b6b;
+        }
+
+        /* Upload Button */
+        .upload-btn-container {
+            margin-top: 1.5rem;
+        }
+
+        .upload-btn {
+            width: 100%;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, var(--upload-accent) 0%, var(--muted-blue) 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .upload-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(55, 168, 110, 0.4);
+        }
+
+        .upload-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Info Section */
+        .upload-info {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: rgba(13, 31, 35, 0.4);
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .upload-info-title {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .upload-info-list {
+            list-style: none;
+        }
+
+        .upload-info-list li {
+            color: var(--text-secondary);
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .upload-info-list li i {
+            color: var(--upload-accent);
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid var(--glass-border);
+            padding: 2rem;
+            text-align: center;
+            margin-top: 4rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .footer-link:hover {
+            color: var(--accent-light);
+        }
+
+        .footer-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .navbar { padding: 1rem; }
+            .menu-toggle { display: block; }
+            .nav-links {
+                position: fixed;
+                top: 80px;
+                left: 0;
+                right: 0;
+                background: rgba(19, 46, 53, 0.95);
+                backdrop-filter: blur(20px);
+                flex-direction: column;
+                padding: 2rem;
+                transform: translateY(-100%);
+                opacity: 0;
+                pointer-events: none;
+                transition: all 0.3s ease;
+            }
+            .nav-links.active {
+                transform: translateY(0);
+                opacity: 1;
+                pointer-events: all;
+            }
+            .main-content { padding: 2rem 1rem; }
+            .upload-card { padding: 1.5rem; }
+            .dropzone { padding: 2rem 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar" id="navbar">
+        <div class="navbar-content">
+            <a href="/" class="logo-section">
+                <img src="https://files.catbox.moe/hfjlrl.png" alt="Logo" class="logo-img">
+            </a>
+            
+            <button class="menu-toggle" id="menuToggle">☰</button>
+            
+            <div class="nav-links" id="navLinks">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/about" class="nav-link">About</a>
+                <a href="/contact" class="nav-link">Contact</a>
+                <a href="/upload" class="nav-link active">Upload</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="page-header">
+            <h1 class="page-title">📤 Upload Files</h1>
+            <p class="page-subtitle">Upload your files securely to cloud storage. Supports resumable uploads for large files.</p>
+        </div>
+
+        <div class="upload-card">
+            <div class="dropzone" id="dropzone" 
+                 ondragover="handleDragOver(event)" 
+                 ondragleave="handleDragLeave(event)" 
+                 ondrop="handleDrop(event)"
+                 onclick="document.getElementById('file-input').click()">
+                <div class="dropzone-icon">📁</div>
+                <p class="dropzone-text">Drag & drop files here</p>
+                <p class="dropzone-subtext">or click to browse your computer</p>
+                <button class="browse-btn" onclick="event.stopPropagation(); document.getElementById('file-input').click();">
+                    Browse Files
+                </button>
+                <input type="file" id="file-input" multiple onchange="handleFileSelect(event)">
+            </div>
+
+            <div class="file-list" id="file-list"></div>
+
+            <div class="progress-container" id="progress-container">
+                <div class="progress-header">
+                    <span id="progress-filename">Uploading...</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progress-bar"></div>
+                </div>
+                <p class="progress-status" id="progress-status">Preparing upload...</p>
+            </div>
+
+            <div class="result-message" id="result-message"></div>
+
+            <div class="upload-btn-container">
+                <button class="upload-btn" id="upload-btn" disabled onclick="startUpload()">
+                    <i class="bi bi-cloud-upload"></i>
+                    <span>Upload Files</span>
+                </button>
+            </div>
+
+            <div class="upload-info">
+                <h3 class="upload-info-title"><i class="bi bi-info-circle"></i> Upload Information</h3>
+                <ul class="upload-info-list">
+                    <li><i class="bi bi-check-circle"></i> Supports all file types</li>
+                    <li><i class="bi bi-check-circle"></i> Resumable uploads for large files</li>
+                    <li><i class="bi bi-check-circle"></i> Maximum file size: 5GB per file</li>
+                    <li><i class="bi bi-shield-check"></i> Secure encrypted transfer</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-links">
+            <a href="/" class="footer-link">Home</a>
+            <a href="/about" class="footer-link">About</a>
+            <a href="/contact" class="footer-link">Contact</a>
+        </div>
+        <p class="footer-text">© ${uiConfig.copyright_year} ${uiConfig.company_name}. All rights reserved.</p>
+    </footer>
+
+    <script>
+        let selectedFiles = [];
+        let isUploading = false;
+        let currentUploadIndex = 0;
+
+        // Mobile menu toggle
+        document.getElementById('menuToggle').addEventListener('click', function() {
+            document.getElementById('navLinks').classList.toggle('active');
+        });
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('dropzone').classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('dropzone').classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('dropzone').classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) {
+                addFiles(Array.from(e.dataTransfer.files));
+            }
+        }
+
+        function handleFileSelect(e) {
+            if (e.target.files.length > 0) {
+                addFiles(Array.from(e.target.files));
+            }
+        }
+
+        function addFiles(files) {
+            selectedFiles = [...selectedFiles, ...files];
+            renderFileList();
+            document.getElementById('upload-btn').disabled = false;
+            hideResult();
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            if (selectedFiles.length === 0) {
+                document.getElementById('file-list').style.display = 'none';
+                document.getElementById('upload-btn').disabled = true;
+            } else {
+                renderFileList();
+            }
+        }
+
+        function renderFileList() {
+            const container = document.getElementById('file-list');
+            container.style.display = 'block';
+            
+            let html = '';
+            selectedFiles.forEach((file, i) => {
+                html += '<div class="file-item">' +
+                    '<span class="file-item-icon">📄</span>' +
+                    '<div class="file-item-details">' +
+                        '<p class="file-item-name">' + escapeHtml(file.name) + '</p>' +
+                        '<p class="file-item-size">' + formatFileSize(file.size) + '</p>' +
+                    '</div>' +
+                    '<button class="file-item-remove" onclick="removeFile(' + i + ')">✕</button>' +
+                '</div>';
+            });
+            
+            const totalSize = selectedFiles.reduce((a, f) => a + f.size, 0);
+            html += '<p class="file-summary">' + selectedFiles.length + ' file(s) selected • Total: ' + formatFileSize(totalSize) + '</p>';
+            
+            container.innerHTML = html;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function showResult(message, type) {
+            const resultEl = document.getElementById('result-message');
+            resultEl.textContent = message;
+            resultEl.className = 'result-message ' + type;
+            resultEl.style.display = 'block';
+        }
+
+        function hideResult() {
+            document.getElementById('result-message').style.display = 'none';
+        }
+
+        function updateProgress(filename, percent, status) {
+            document.getElementById('progress-filename').textContent = filename;
+            document.getElementById('progress-percent').textContent = Math.round(percent) + '%';
+            document.getElementById('progress-bar').style.width = percent + '%';
+            document.getElementById('progress-status').textContent = status;
+        }
+
+        async function startUpload() {
+            if (selectedFiles.length === 0 || isUploading) return;
+            
+            isUploading = true;
+            document.getElementById('upload-btn').disabled = true;
+            document.getElementById('progress-container').style.display = 'block';
+            hideResult();
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                updateProgress(file.name, 0, 'Initializing upload for ' + file.name + '...');
+                
+                try {
+                    // Step 1: Get resumable upload URL from our API
+                    const initResponse = await fetch('/api/init-upload', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            fileName: file.name,
+                            mimeType: file.type || 'application/octet-stream',
+                            fileSize: file.size
+                        })
+                    });
+                    
+                    if (!initResponse.ok) {
+                        throw new Error('Failed to initialize upload');
+                    }
+                    
+                    const initData = await initResponse.json();
+                    
+                    if (!initData.success || !initData.uploadUrl) {
+                        throw new Error(initData.error || 'Failed to get upload URL');
+                    }
+                    
+                    // Step 2: Upload file directly to Google Drive using resumable upload URL
+                    await uploadFileResumable(file, initData.uploadUrl, (progress) => {
+                        updateProgress(file.name, progress, 'Uploading ' + file.name + '... ' + Math.round(progress) + '%');
+                    });
+                    
+                    successCount++;
+                    updateProgress(file.name, 100, 'Completed: ' + file.name);
+                    
+                } catch (error) {
+                    console.error('Upload failed for ' + file.name + ':', error);
+                    failCount++;
+                    updateProgress(file.name, 0, 'Failed: ' + file.name + ' - ' + error.message);
+                }
+                
+                // Small delay between files
+                if (i < selectedFiles.length - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+            
+            // Show final result
+            if (failCount === 0) {
+                showResult('All ' + successCount + ' file(s) uploaded successfully!', 'success');
+            } else if (successCount === 0) {
+                showResult('Upload failed for all files. Please try again.', 'error');
+            } else {
+                showResult(successCount + ' file(s) uploaded, ' + failCount + ' failed.', 'error');
+            }
+            
+            // Reset state
+            isUploading = false;
+            selectedFiles = [];
+            document.getElementById('file-list').style.display = 'none';
+            document.getElementById('progress-container').style.display = 'none';
+            document.getElementById('file-input').value = '';
+        }
+
+        async function uploadFileResumable(file, uploadUrl, onProgress) {
+            const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            
+            for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                const start = chunkIndex * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
+                
+                const contentRange = 'bytes ' + start + '-' + (end - 1) + '/' + file.size;
+                
+                let retries = 3;
+                let success = false;
+                
+                while (retries > 0 && !success) {
+                    try {
+                        // Use our proxy endpoint instead of Google directly (CORS fix)
+                        const response = await fetch('/api/upload-chunk', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                'X-Upload-Url': uploadUrl,
+                                'X-Content-Range': contentRange
+                            },
+                            body: chunk
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            success = true;
+                            if (result.complete) {
+                                onProgress(100);
+                            } else {
+                                const progress = ((chunkIndex + 1) / totalChunks) * 100;
+                                onProgress(progress);
+                            }
+                        } else {
+                            throw new Error(result.error || 'Chunk upload failed');
+                        }
+                    } catch (error) {
+                        retries--;
+                        if (retries === 0) {
+                            throw error;
+                        }
+                        // Wait before retry
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
+            }
+        }
+    </script>
+
 </body>
 </html>`;
 
@@ -6601,6 +8008,50 @@ async function handleRequest(request, event) {
         });
     }
 
+    // Telegram bot webhook (for /approve, /block, /pending commands)
+    if (path === '/telegram' && request.method === 'POST') {
+        return await handleTelegramUpdate(request);
+    }
+
+    // --- ONE-TIME APPROVAL LINK ROUTE (usable from Telegram message) ---
+    if (path === '/approve' && request.method === 'GET') {
+        const token = url.searchParams.get('token');
+        const action = (url.searchParams.get('action') || 'approve').toLowerCase();
+        if (!token) return new Response('Missing token.', { status: 400 });
+        if (action !== 'approve' && action !== 'block') return new Response('Invalid action.', { status: 400 });
+
+        try {
+            const record = await consumeApprovalToken(token);
+            if (!record || !record.username) return new Response('Token invalid or expired.', { status: 403 });
+
+            const user = await getKVUser(record.username);
+            if (!user) return new Response('User not found.', { status: 404 });
+
+            const oldStatus = user.status;
+            user.status = action === 'approve' ? 'approved' : 'blocked';
+            await setKVUser(record.username, user);
+
+            // Log as "telegram_approval_link" (no session/admin identity here)
+            await logActivity('USER_STATUS_CHANGE', 'telegram_approval_link', request, {
+                from: oldStatus,
+                to: user.status,
+                target_user: record.username,
+                via: 'one_time_link'
+            });
+            if (user.status === 'approved' && oldStatus === 'pending') {
+                await logActivity('USER_APPROVED', 'telegram_approval_link', request, { target_user: record.username, via: 'one_time_link' });
+            }
+
+            const msg = action === 'approve'
+                ? `User "${record.username}" approved successfully.`
+                : `User "${record.username}" blocked successfully.`;
+            return new Response(msg, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+        } catch (e) {
+            console.error('Approve link error:', e);
+            return new Response('Server error.', { status: 500 });
+        }
+    }
+
     if (path.startsWith('/api/admin/')) {
         if (!isAuthenticated || !isAdministrator) return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 
@@ -6689,6 +8140,156 @@ async function handleRequest(request, event) {
             }
         });
     }
+
+    // Handle CORS preflight for init-upload (must come BEFORE the POST handler)
+    if (path === '/api/init-upload' && request.method === 'OPTIONS') {
+        return new Response(null, {
+            status: 204,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Max-Age': '86400'
+            }
+        });
+    }
+
+    // Resumable upload session initialization - for large files
+    // Returns a Google Drive resumable upload URL that the browser can upload to directly
+    if (path === '/api/init-upload' && request.method === 'POST') {
+        if (!isAuthenticated) {
+            return new Response(JSON.stringify({ success: false, error: 'Authentication required' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
+        if (!authConfig.enable_upload) {
+            return new Response(JSON.stringify({ success: false, error: 'Upload feature is disabled' }), {
+                status: 403,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
+        try {
+            const data = await request.json();
+            const { fileName, mimeType, fileSize } = data;
+
+            if (!fileName) {
+                return new Response(JSON.stringify({ success: false, error: 'File name is required' }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                });
+            }
+
+            // Create resumable upload session with Google Drive
+            const uploadUrl = await createUploadSession(
+                authConfig.upload_folder_id,
+                fileName,
+                mimeType || 'application/octet-stream'
+            );
+
+            if (uploadUrl) {
+                await logActivity('UPLOAD_INIT', username, request, { fileName, fileSize, mimeType });
+                return new Response(JSON.stringify({
+                    success: true,
+                    uploadUrl: uploadUrl,
+                    fileName: fileName
+                }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                });
+            } else {
+                return new Response(JSON.stringify({ success: false, error: 'Failed to create upload session' }), {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                });
+            }
+        } catch (error) {
+            console.error('Init upload error:', error);
+            return new Response(JSON.stringify({ success: false, error: error.message }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+    }
+
+    // Handle CORS preflight for upload-chunk
+    if (path === '/api/upload-chunk' && request.method === 'OPTIONS') {
+        return new Response(null, {
+            status: 204,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, X-Upload-Url, X-Content-Range',
+                'Access-Control-Max-Age': '86400'
+            }
+        });
+    }
+
+    // Proxy chunk upload to Google Drive - bypasses CORS
+    if (path === '/api/upload-chunk' && request.method === 'POST') {
+        if (!isAuthenticated) {
+            return new Response(JSON.stringify({ success: false, error: 'Authentication required' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+
+        try {
+            const uploadUrl = request.headers.get('X-Upload-Url');
+            const contentRange = request.headers.get('X-Content-Range');
+
+            if (!uploadUrl) {
+                return new Response(JSON.stringify({ success: false, error: 'Upload URL required' }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                });
+            }
+
+            // Get the chunk data from request body
+            const chunkData = await request.arrayBuffer();
+
+            // Forward the chunk to Google Drive
+            const gdResponse = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Length': chunkData.byteLength.toString(),
+                    'Content-Range': contentRange
+                },
+                body: chunkData
+            });
+
+            // Return the Google Drive response status
+            const responseData = {
+                success: gdResponse.status === 200 || gdResponse.status === 201 || gdResponse.status === 308,
+                status: gdResponse.status,
+                complete: gdResponse.status === 200 || gdResponse.status === 201
+            };
+
+            if (gdResponse.status === 200 || gdResponse.status === 201) {
+                // Upload complete, get file info
+                try {
+                    const fileInfo = await gdResponse.json();
+                    responseData.fileId = fileInfo.id;
+                } catch (e) {
+                    // Ignore JSON parse errors
+                }
+            }
+
+            return new Response(JSON.stringify(responseData), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+
+        } catch (error) {
+            console.error('Chunk upload error:', error);
+            return new Response(JSON.stringify({ success: false, error: error.message }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+        }
+    }
     // --- END UPLOAD API ROUTES ---
 
 
@@ -6728,6 +8329,20 @@ async function handleRequest(request, event) {
     // Contact Page Route
     if (path == '/contact') {
         return new Response(contact_html, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/html; charset=utf-8'
+            }
+        });
+    }
+
+    // Upload Page Route
+    if (path == '/upload') {
+        if (!isAuthenticated) return login('/upload');
+        if (!authConfig.enable_upload) {
+            return new Response('Upload feature is disabled', { status: 403 });
+        }
+        return new Response(upload_html, {
             status: 200,
             headers: {
                 'Content-Type': 'text/html; charset=utf-8'
@@ -6855,6 +8470,18 @@ ${escapeHtml(msg)}
                     if (user_data.status === 'approved') {
                         user_found_and_approved = true;
                         await logActivity('LOGIN_SUCCESS', inputUsername, request);
+
+                        // Optional Telegram login notification (toggle via /loginnotify in bot)
+                        try {
+                            if (await isLoginNotifyEnabled()) {
+                                await sendTelegramMessage(
+                                    `🔐 <b>Login success</b>\n\n<b>User:</b> <code>${escapeHtml(inputUsername)}</code>\n<b>IP:</b> ${escapeHtml(user_ip || 'unknown')}\n<b>Time:</b> ${escapeHtml(new Date().toLocaleString())}`,
+                                    { parseMode: 'HTML' }
+                                );
+                            }
+                        } catch (e) {
+                            console.error('Telegram login notify error:', e);
+                        }
                     } else {
                         await logActivity('LOGIN_FAILED', inputUsername, request, { reason: `Status: ${user_data.status}` });
                         return jsonResponse({ ok: false, message: `Your account status is ${user_data.status}. Login denied.` });
@@ -6925,6 +8552,50 @@ ${escapeHtml(msg)}
                     };
                     await setKVUser(inputUsername, newUser);
                     await logActivity('SIGNUP_PENDING', inputUsername, request);
+
+                    // Telegram notification for pending approvals (uses same BOT_TOKEN + TO_ID as contact form)
+                    try {
+                        const botToken = typeof BOT_TOKEN !== 'undefined' ? BOT_TOKEN : null;
+                        const toId = typeof TO_ID !== 'undefined' ? TO_ID : null;
+                        if (botToken && toId) {
+                            const token = await createApprovalTokenForUser(inputUsername);
+                            const approveUrl = `${url.origin}/approve?token=${token}&action=approve`;
+                            const blockUrl = `${url.origin}/approve?token=${token}&action=block`;
+
+                            const telegramMessage = `🆕 <b>Signup Pending Approval</b>
+
+<b>👤 Username:</b> ${escapeHtml(inputUsername)}
+<b>🕒 Created:</b> ${escapeHtml(new Date(newUser.created_at).toISOString())}
+<b>🌐 IP:</b> ${escapeHtml(user_ip || 'unknown')}
+
+You can approve using the buttons below or via /admin.`;
+
+                            const tgResult = await sendTelegramMessage(telegramMessage, {
+                                parseMode: 'HTML',
+                                disableWebPreview: true,
+                                replyMarkup: {
+                                    inline_keyboard: [
+                                        [
+                                            { text: '✅ Approve', callback_data: `approve:${inputUsername}` },
+                                            { text: '⛔ Block', callback_data: `block:${inputUsername}` }
+                                        ],
+                                        [
+                                            { text: 'Open admin panel', url: `${url.origin}/admin` }
+                                        ]
+                                    ]
+                                }
+                            });
+                            if (tgResult && tgResult.ok) {
+                                await logActivity('SIGNUP_PENDING_TELEGRAM_SENT', inputUsername, request, { username: inputUsername });
+                            } else if (tgResult && !tgResult.skipped) {
+                                await logActivity('SIGNUP_PENDING_TELEGRAM_FAILED', inputUsername, request, { error: tgResult });
+                            }
+                        }
+                    } catch (tgErr) {
+                        console.error('Signup Telegram notify error:', tgErr);
+                        await logActivity('SIGNUP_PENDING_TELEGRAM_ERROR', inputUsername, request, { error: String(tgErr) });
+                    }
+
                     jsonResponse = { ok: true, message: "Account Created. Awaiting Admin Approval." };
                 }
             }
@@ -7213,6 +8884,14 @@ async function handleAdminUsers(request, user_ip) {
             await ENV.delete(USER_PREFIX + username);
             // LOGGING: User deletion
             await logActivity('USER_DELETED', request.username, request, { target_user: username, admin_ip: user_ip });
+            try {
+                await sendTelegramMessage(
+                    `🗑️ Admin <b>${escapeHtml(request.username)}</b> deleted user <b>${escapeHtml(username)}</b>.`,
+                    { parseMode: 'HTML' }
+                );
+            } catch (e) {
+                console.error('Telegram admin delete notify error:', e);
+            }
             return jsonResponse({ success: true, message: `User ${username} deleted.` });
         }
 
@@ -7228,6 +8907,16 @@ async function handleAdminUsers(request, user_ip) {
                 // LOGGING: Explicit approval
                 await logActivity('USER_APPROVED', request.username, request, { target_user: username, admin_ip: user_ip });
             }
+
+            // Telegram notification for admin status change
+            try {
+                await sendTelegramMessage(
+                    `👤 Admin <b>${escapeHtml(request.username)}</b> changed user <b>${escapeHtml(username)}</b> status: <code>${escapeHtml(oldStatus)}</code> ➜ <b>${escapeHtml(status)}</b>.`,
+                    { parseMode: 'HTML' }
+                );
+            } catch (e) {
+                console.error('Telegram admin status notify error:', e);
+            }
         }
 
         if (roles) {
@@ -7237,6 +8926,15 @@ async function handleAdminUsers(request, user_ip) {
 
             // LOGGING: User role change
             await logActivity('USER_ROLE_CHANGE', request.username, request, { from_roles: oldRoles, to_roles: roles, target_user: username, admin_ip: user_ip });
+
+            try {
+                await sendTelegramMessage(
+                    `👤 Admin <b>${escapeHtml(request.username)}</b> updated roles for <b>${escapeHtml(username)}</b>.\nOld: <code>${escapeHtml(JSON.stringify(oldRoles || []))}</code>\nNew: <code>${escapeHtml(JSON.stringify(roles || []))}</code>`,
+                    { parseMode: 'HTML' }
+                );
+            } catch (e) {
+                console.error('Telegram admin role notify error:', e);
+            }
         }
 
         return jsonResponse({ success: true, user: user });
@@ -7274,6 +8972,14 @@ async function handleAdminLogs(request) {
                     daysOld: daysOld,
                     deletedCount: deletedCount
                 });
+                try {
+                    await sendTelegramMessage(
+                        `🧹 Admin <b>${escapeHtml(request.username)}</b> cleaned logs older than <b>${escapeHtml(String(daysOld))}</b> days.\nDeleted: <b>${escapeHtml(String(deletedCount))}</b> entries.`,
+                        { parseMode: 'HTML' }
+                    );
+                } catch (e) {
+                    console.error('Telegram log cleanup notify error:', e);
+                }
             } else if (action === 'deleteByType' && logType) {
                 deletedCount = await deleteLogsByType(logType);
                 message = `Deleted ${deletedCount} logs of type "${logType}"`;
@@ -7283,6 +8989,14 @@ async function handleAdminLogs(request) {
                     logType: logType,
                     deletedCount: deletedCount
                 });
+                try {
+                    await sendTelegramMessage(
+                        `🧹 Admin <b>${escapeHtml(request.username)}</b> deleted logs of type <code>${escapeHtml(logType)}</code>.\nDeleted: <b>${escapeHtml(String(deletedCount))}</b> entries.`,
+                        { parseMode: 'HTML' }
+                    );
+                } catch (e) {
+                    console.error('Telegram log cleanup notify error:', e);
+                }
             } else if (action === 'deleteAll') {
                 deletedCount = await deleteOldLogs(0);
                 message = `Deleted all ${deletedCount} activity logs`;
@@ -7291,6 +9005,14 @@ async function handleAdminLogs(request) {
                     action: 'deleteAll',
                     deletedCount: deletedCount
                 });
+                try {
+                    await sendTelegramMessage(
+                        `🧹 Admin <b>${escapeHtml(request.username)}</b> deleted <b>all</b> activity logs.\nDeleted: <b>${escapeHtml(String(deletedCount))}</b> entries.`,
+                        { parseMode: 'HTML' }
+                    );
+                } catch (e) {
+                    console.error('Telegram log cleanup notify error:', e);
+                }
             } else {
                 return jsonResponse({ success: false, error: 'Invalid action' }, 400);
             }
