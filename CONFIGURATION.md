@@ -14,12 +14,87 @@ This guide will help you set up your own instance of the Enhanced Google Drive I
 ### 2. Create OAuth 2.0 Credentials
 1. Go to **APIs & Services** → **Credentials**
 2. Click **Create Credentials** → **OAuth client ID**
-3. Choose **Web application**
-4. Add authorized redirect URIs (your worker URL)
-5. Copy the **Client ID** and **Client Secret**
+3. If prompted, configure the OAuth consent screen first:
+   - Choose **External** user type
+   - Fill in the required app information
+   - Add your email to test users
+4. Choose **Desktop app** as the application type
+5. Give it a name (e.g., "GDrive Index")
+6. Click **Create**
+7. Copy the **Client ID** and **Client Secret**
 
-### 3. Get Refresh Token
-Use the [OAuth Playground](https://developers.google.com/oauthplayground/) or similar tool to get a refresh token with Drive access.
+> **Note:** Desktop app type is simpler and works perfectly with Cloudflare Workers. No redirect URIs are needed!
+
+### 3. Get Refresh Token (Using Rclone)
+
+The easiest way to get a refresh token is using **rclone**. Here's how:
+
+#### Step 1: Download Rclone
+1. Go to [rclone.org/downloads](https://rclone.org/downloads/)
+2. Download the appropriate version for your OS
+3. Extract the zip file to a folder (e.g., `C:\rclone`)
+
+#### Step 2: Open Command Prompt
+1. Press `Win + R`, type `cmd`, and press Enter
+2. Navigate to the rclone folder:
+   ```
+   cd C:\rclone
+   ```
+
+#### Step 3: Run Rclone Config
+1. Run the configuration command:
+   ```
+   rclone config
+   ```
+
+2. Follow the prompts:
+   ```
+   n) New remote
+   ```
+   Type `n` and press Enter
+
+3. Enter a name for this remote (e.g., `gdrive`) and press Enter
+
+4. When asked for storage type, find **Google Drive** and enter its number (usually `17` or search for `drive`)
+
+5. **Client ID:** Paste your OAuth Client ID from Google Cloud Console
+
+6. **Client Secret:** Paste your OAuth Client Secret
+
+7. **Scope:** Choose `1` for full access (drive)
+
+8. **Service Account:** Leave blank (just press Enter)
+
+9. **Advanced Config:** Type `n` (no)
+
+10. **Auto Config:** Type `y` (yes) - this will open your browser
+
+11. Sign in with your Google account and authorize the app
+
+12. **Configure as team drive:** Type `n` (no) unless you're using a Shared Drive
+
+13. **Confirm:** Type `y` to confirm
+
+#### Step 4: Get Your Refresh Token
+1. After configuration, run:
+   ```
+   rclone config file
+   ```
+
+2. This shows the config file location. Open that file in a text editor
+
+3. Find your remote section and copy the `refresh_token` value:
+   ```ini
+   [gdrive]
+   type = drive
+   client_id = YOUR_CLIENT_ID
+   client_secret = YOUR_CLIENT_SECRET
+   token = {"access_token":"...","token_type":"Bearer","refresh_token":"YOUR_REFRESH_TOKEN_HERE","expiry":"..."}
+   ```
+
+4. The `refresh_token` inside the `token` JSON is what you need!
+
+> **Tip:** You can also view your config directly by running: `rclone config show`
 
 ---
 
