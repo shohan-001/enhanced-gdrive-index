@@ -638,12 +638,24 @@ async function handleTelegramUpdate(request) {
             }
 
             if (action === 'close_menu') {
-                await sendTelegramMessage('✅ Menu closed.', { chatId });
+                // Delete the message with the menu
+                const messageId = callback.message?.message_id;
+                if (messageId) {
+                    try {
+                        await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chat_id: chatId, message_id: messageId })
+                        });
+                    } catch (e) {
+                        console.error('deleteMessage failed:', e);
+                    }
+                }
                 try {
                     await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ callback_query_id: callback.id })
+                        body: JSON.stringify({ callback_query_id: callback.id, text: 'Menu closed' })
                     });
                 } catch (e) {
                     console.error('answerCallbackQuery failed:', e);
