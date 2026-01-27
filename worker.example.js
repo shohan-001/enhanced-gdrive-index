@@ -455,6 +455,366 @@ async function handleTelegramUpdate(request) {
 
                 return new Response('OK', { status: 200 });
             }
+
+            // Log cleanup button handlers
+            if (action === 'logs_delete_7d' || action === 'logs_delete_30d') {
+                const days = action === 'logs_delete_7d' ? 7 : 30;
+                const deletedCount = await deleteOldLogs(days);
+                await logActivity('ADMIN_LOG_CLEANUP', 'telegram_bot', request, {
+                    action: 'deleteOld',
+                    daysOld: days,
+                    deletedCount,
+                    via: 'telegram_button'
+                });
+                await sendTelegramMessage(
+                    `🧹 Deleted <b>${escapeHtml(String(deletedCount))}</b> logs older than <b>${days}</b> days.`,
+                    { parseMode: 'HTML', chatId }
+                );
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'logs_delete_all_confirm') {
+                // Show confirmation before deleting all
+                await sendTelegramMessage(
+                    `⚠️ <b>Are you sure you want to delete ALL logs?</b>\n\nThis action cannot be undone!`,
+                    {
+                        parseMode: 'HTML',
+                        chatId,
+                        replyMarkup: {
+                            inline_keyboard: [
+                                [
+                                    { text: '✅ Yes, Delete All', callback_data: 'logs_delete_all_yes' },
+                                    { text: '❌ Cancel', callback_data: 'logs_delete_cancel' }
+                                ]
+                            ]
+                        }
+                    }
+                );
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'logs_delete_all_yes') {
+                const deletedCount = await deleteOldLogs(0);
+                await logActivity('ADMIN_LOG_CLEANUP', 'telegram_bot', request, {
+                    action: 'deleteAll',
+                    deletedCount,
+                    via: 'telegram_button'
+                });
+                await sendTelegramMessage(
+                    `🧹 Deleted <b>${escapeHtml(String(deletedCount))}</b> activity logs (all).`,
+                    { parseMode: 'HTML', chatId }
+                );
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'logs_delete_cancel') {
+                await sendTelegramMessage('❌ Log deletion cancelled.', { chatId });
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'logs_cleanup_menu') {
+                await sendTelegramMessage(
+                    `<b>🧹 Log Cleanup Menu</b>\n\nSelect cleanup option:`,
+                    {
+                        parseMode: 'HTML',
+                        chatId,
+                        replyMarkup: {
+                            inline_keyboard: [
+                                [
+                                    { text: '🗑️ 7+ days', callback_data: 'logs_delete_7d' },
+                                    { text: '🗑️ 14+ days', callback_data: 'logs_delete_14d' },
+                                    { text: '🗑️ 30+ days', callback_data: 'logs_delete_30d' }
+                                ],
+                                [
+                                    { text: '🗑️ 60+ days', callback_data: 'logs_delete_60d' },
+                                    { text: '🗑️ 90+ days', callback_data: 'logs_delete_90d' }
+                                ],
+                                [
+                                    { text: '📝 Custom Days...', callback_data: 'logs_custom_days_prompt' }
+                                ],
+                                [
+                                    { text: '⚠️ Delete ALL Logs', callback_data: 'logs_delete_all_confirm' }
+                                ],
+                                [
+                                    { text: '🔙 Back to Logs', callback_data: 'logs_refresh' },
+                                    { text: '❌ Close', callback_data: 'close_menu' }
+                                ]
+                            ]
+                        }
+                    }
+                );
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'logs_delete_14d' || action === 'logs_delete_60d' || action === 'logs_delete_90d') {
+                const daysMap = { 'logs_delete_14d': 14, 'logs_delete_60d': 60, 'logs_delete_90d': 90 };
+                const days = daysMap[action];
+                const deletedCount = await deleteOldLogs(days);
+                await logActivity('ADMIN_LOG_CLEANUP', 'telegram_bot', request, {
+                    action: 'deleteOld',
+                    daysOld: days,
+                    deletedCount,
+                    via: 'telegram_button'
+                });
+                await sendTelegramMessage(
+                    `🧹 Deleted <b>${escapeHtml(String(deletedCount))}</b> logs older than <b>${days}</b> days.`,
+                    { parseMode: 'HTML', chatId }
+                );
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'logs_custom_days_prompt') {
+                await sendTelegramMessage(
+                    `<b>📝 Custom cleanup</b>\n\nTo delete logs older than a custom number of days, use:\n\n<code>/logs_delete_old N</code>\n\nExample: <code>/logs_delete_old 45</code>`,
+                    { parseMode: 'HTML', chatId }
+                );
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'close_menu') {
+                await sendTelegramMessage('✅ Menu closed.', { chatId });
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'logs_refresh') {
+                const logs = await listAllLogs('');
+                const recent = logs.slice(0, 10);
+                const totalLogs = logs.length;
+
+                if (!recent.length) {
+                    await sendTelegramMessage('📊 No logs stored yet.', { chatId });
+                } else {
+                    const lines = recent.map(log => {
+                        const when = new Date(log.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+                        return `• <b>${escapeHtml(log.type)}</b> by <code>${escapeHtml(log.user || 'unknown')}</code> at ${escapeHtml(when)}`;
+                    });
+                    await sendTelegramMessage(
+                        `<b>📊 Recent logs (showing ${recent.length} of ${totalLogs}):</b>\n` + lines.join('\n'),
+                        {
+                            parseMode: 'HTML',
+                            chatId,
+                            replyMarkup: {
+                                inline_keyboard: [
+                                    [
+                                        { text: '📋 Filter by Type', callback_data: 'logs_filter_menu' },
+                                        { text: '🧹 Cleanup Menu', callback_data: 'logs_cleanup_menu' }
+                                    ],
+                                    [
+                                        { text: '🔄 Refresh', callback_data: 'logs_refresh' },
+                                        { text: '❌ Close', callback_data: 'close_menu' }
+                                    ]
+                                ]
+                            }
+                        }
+                    );
+                }
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            if (action === 'logs_filter_menu') {
+                // Show common log types as buttons
+                await sendTelegramMessage(
+                    `<b>📋 Filter logs by type:</b>\n\nSelect a log type to view:`,
+                    {
+                        parseMode: 'HTML',
+                        chatId,
+                        replyMarkup: {
+                            inline_keyboard: [
+                                [
+                                    { text: '👤 LOGIN', callback_data: 'logs_type:LOGIN' },
+                                    { text: '📝 SIGNUP', callback_data: 'logs_type:SIGNUP' }
+                                ],
+                                [
+                                    { text: '⬇️ DOWNLOAD', callback_data: 'logs_type:DOWNLOAD' },
+                                    { text: '⬆️ UPLOAD', callback_data: 'logs_type:UPLOAD' }
+                                ],
+                                [
+                                    { text: '✅ USER_APPROVED', callback_data: 'logs_type:USER_APPROVED' },
+                                    { text: '🔄 STATUS_CHANGE', callback_data: 'logs_type:USER_STATUS_CHANGE' }
+                                ],
+                                [
+                                    { text: '🔙 Back to Logs', callback_data: 'logs_refresh' },
+                                    { text: '❌ Close', callback_data: 'close_menu' }
+                                ]
+                            ]
+                        }
+                    }
+                );
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            // Handle logs_type:TYPE callback for filtered logs
+            if (action === 'logs_type') {
+                const type = usernameRaw || '';
+                const logs = await listAllLogs(type);
+                const recent = logs.slice(0, 10);
+
+                if (!recent.length) {
+                    await sendTelegramMessage(
+                        `📊 No logs found for type <code>${escapeHtml(type)}</code>.`,
+                        { parseMode: 'HTML', chatId }
+                    );
+                } else {
+                    const lines = recent.map(log => {
+                        const when = new Date(log.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+                        return `• <b>${escapeHtml(log.type)}</b> by <code>${escapeHtml(log.user || 'unknown')}</code> at ${escapeHtml(when)}`;
+                    });
+                    await sendTelegramMessage(
+                        `<b>📊 Logs of type <code>${escapeHtml(type)}</code> (${recent.length}):</b>\n` + lines.join('\n'),
+                        {
+                            parseMode: 'HTML',
+                            chatId,
+                            replyMarkup: {
+                                inline_keyboard: [
+                                    [
+                                        { text: `🗑️ Delete all ${type} logs`, callback_data: `logs_delete_type:${type}` }
+                                    ],
+                                    [
+                                        { text: '📋 Filter Menu', callback_data: 'logs_filter_menu' },
+                                        { text: '🔙 All Logs', callback_data: 'logs_refresh' }
+                                    ],
+                                    [
+                                        { text: '❌ Close', callback_data: 'close_menu' }
+                                    ]
+                                ]
+                            }
+                        }
+                    );
+                }
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
+
+            // Handle logs_delete_type:TYPE callback
+            if (action === 'logs_delete_type') {
+                const type = usernameRaw || '';
+                const deletedCount = await deleteLogsByType(type);
+                await logActivity('ADMIN_LOG_CLEANUP', 'telegram_bot', request, {
+                    action: 'deleteByType',
+                    logType: type,
+                    deletedCount,
+                    via: 'telegram_button'
+                });
+                await sendTelegramMessage(
+                    `🧹 Deleted <b>${escapeHtml(String(deletedCount))}</b> logs of type <code>${escapeHtml(type)}</code>.`,
+                    { parseMode: 'HTML', chatId }
+                );
+
+                try {
+                    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ callback_query_id: callback.id })
+                    });
+                } catch (e) {
+                    console.error('answerCallbackQuery failed:', e);
+                }
+                return new Response('OK', { status: 200 });
+            }
         }
 
         if (!message || !message.text) {
@@ -574,16 +934,33 @@ async function handleTelegramUpdate(request) {
         if (cmd === '/logs') {
             const logs = await listAllLogs('');
             const recent = logs.slice(0, 10);
+            const totalLogs = logs.length;
+
             if (!recent.length) {
-                await sendTelegramMessage('No logs stored yet.', { chatId });
+                await sendTelegramMessage('📊 No logs stored yet.', { chatId });
             } else {
                 const lines = recent.map(log => {
-                    const when = new Date(log.timestamp).toLocaleString();
+                    const when = new Date(log.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
                     return `• <b>${escapeHtml(log.type)}</b> by <code>${escapeHtml(log.user || 'unknown')}</code> at ${escapeHtml(when)}`;
                 });
                 await sendTelegramMessage(
-                    `<b>Recent logs (${recent.length}):</b>\n` + lines.join('\n'),
-                    { parseMode: 'HTML', chatId }
+                    `<b>📊 Recent logs (showing ${recent.length} of ${totalLogs}):</b>\n` + lines.join('\n'),
+                    {
+                        parseMode: 'HTML',
+                        chatId,
+                        replyMarkup: {
+                            inline_keyboard: [
+                                [
+                                    { text: '📋 Filter by Type', callback_data: 'logs_filter_menu' },
+                                    { text: '🧹 Cleanup Menu', callback_data: 'logs_cleanup_menu' }
+                                ],
+                                [
+                                    { text: '🔄 Refresh', callback_data: 'logs_refresh' },
+                                    { text: '❌ Close', callback_data: 'close_menu' }
+                                ]
+                            ]
+                        }
+                    }
                 );
             }
             return new Response('OK', { status: 200 });
