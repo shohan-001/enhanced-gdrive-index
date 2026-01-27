@@ -675,11 +675,48 @@ async function handleTelegramUpdate(request) {
             return new Response('OK', { status: 200 });
         }
 
-        // Default help
-        await sendTelegramMessage(
-            `Available commands:\n/approve &lt;username&gt; – approve user\n/block &lt;username&gt; – block user\n/pending – list recent pending signups`,
-            { parseMode: 'HTML', chatId }
-        );
+        // Default help / start message
+        const startMessage = `
+<b>🚀 Enhanced GDrive Index Bot</b>
+<i>Admin Control Panel v2.7.0</i>
+
+━━━━━━━━━━━━━━━━━━━━
+<b>📋 Available Commands:</b>
+━━━━━━━━━━━━━━━━━━━━
+
+<b>👥 User Management</b>
+├ /approve <code>&lt;username&gt;</code> - Approve user
+├ /block <code>&lt;username&gt;</code> - Block user
+└ /pending - List pending signups
+
+<b>🔔 Notifications</b>
+└ /loginnotify - Toggle login alerts
+
+<b>📊 Logs Management</b>
+├ /logs - View recent logs
+├ /logs_type <code>&lt;type&gt;</code> - Filter by type
+├ /logs_delete_old <code>&lt;days&gt;</code> - Delete old
+├ /logs_delete_type <code>&lt;type&gt;</code> - Delete by type
+└ /logs_delete_all - Clear all logs
+
+━━━━━━━━━━━━━━━━━━━━
+<b>Made with ❤️ by @shohan_001</b>
+`;
+        await sendTelegramMessage(startMessage, {
+            parseMode: 'HTML',
+            chatId,
+            replyMarkup: {
+                inline_keyboard: [
+                    [
+                        { text: '👤 GitHub Profile', url: 'https://github.com/shohan-001' },
+                        { text: '📦 Repository', url: 'https://github.com/shohan-001/enhanced-gdrive-index' }
+                    ],
+                    [
+                        { text: '⭐ Star the Repo', url: 'https://github.com/shohan-001/enhanced-gdrive-index/stargazers' }
+                    ]
+                ]
+            }
+        });
         return new Response('OK', { status: 200 });
     } catch (e) {
         console.error('Telegram webhook error:', e);
