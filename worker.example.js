@@ -63,6 +63,7 @@ const authConfig = {
         // { "username": "example_user", "password": "secure_password" },
     ],
     "roots": [
+        // --- STANDARD DRIVES (uses global credentials above) ---
         {
             "id": "YOUR_FOLDER_ID_1", // Get from Google Drive folder URL
             "name": "📁 Folder 1",
@@ -74,6 +75,19 @@ const authConfig = {
             "name": "📁 Folder 2",
             "protect_file_link": false
         },
+
+        // --- MULTI-DRIVE EXAMPLE (uses its own separate Google account) ---
+        // To add a drive from a DIFFERENT Google account, add client_id, client_secret, and refresh_token below.
+        // If these 3 fields are omitted, the drive will use the global credentials at the top of authConfig.
+        // {
+        //     "id": "YOUR_SECOND_ACCOUNT_FOLDER_ID",
+        //     "name": "🔒 Second Account Drive",
+        //     "client_id": "YOUR_SECOND_CLIENT_ID.apps.googleusercontent.com",
+        //     "client_secret": "YOUR_SECOND_CLIENT_SECRET",
+        //     "refresh_token": "YOUR_SECOND_REFRESH_TOKEN",
+        //     "protect_file_link": false
+        // },
+
         // Add more folders as needed...
     ]
 };
@@ -9886,34 +9900,34 @@ function enQuery(data) {
     return ret.join('&');
 }
 
-async function getAccessToken() {
-    if (authConfig.expires == undefined || authConfig.expires < Date.now()) {
-        const obj = await fetchAccessToken();
+async function getAccessToken(config = authConfig) {
+    if (config.expires == undefined || config.expires < Date.now()) {
+        const obj = await fetchAccessToken(config);
         if (obj.access_token != undefined) {
-            authConfig.accessToken = obj.access_token;
-            authConfig.expires = Date.now() + 3500 * 1000;
+            config.accessToken = obj.access_token;
+            config.expires = Date.now() + 3500 * 1000;
         }
     }
-    return authConfig.accessToken;
+    return config.accessToken;
 }
 
-async function fetchAccessToken() {
+async function fetchAccessToken(config = authConfig) {
     const url = "https://www.googleapis.com/oauth2/v4/token";
     const headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
     };
     var post_data;
-    if (authConfig.service_account && typeof authConfig.service_account_json != "undefined") {
-        const jwttoken = await JSONWebToken.generateGCPToken(authConfig.service_account_json);
+    if (config.service_account && typeof config.service_account_json != "undefined") {
+        const jwttoken = await JSONWebToken.generateGCPToken(config.service_account_json);
         post_data = {
             grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
             assertion: jwttoken,
         };
     } else {
         post_data = {
-            client_id: authConfig.client_id,
-            client_secret: authConfig.client_secret,
-            refresh_token: authConfig.refresh_token,
+            client_id: config.client_id,
+            client_secret: config.client_secret,
+            refresh_token: config.refresh_token,
             grant_type: "refresh_token",
         };
     }
@@ -10210,6 +10224,19 @@ class googleDrive {
         this.root.protect_file_link = this.root.protect_file_link || false;
         this.url_path_prefix = `/${order}:`;
         this.authConfig = authConfig;
+
+        // Clone authConfig if per-drive credentials exist
+        if (this.root.client_id && this.root.client_secret && this.root.refresh_token) {
+            this.driveAuthConfig = Object.assign({}, authConfig);
+            this.driveAuthConfig.client_id = this.root.client_id;
+            this.driveAuthConfig.client_secret = this.root.client_secret;
+            this.driveAuthConfig.refresh_token = this.root.refresh_token;
+            this.driveAuthConfig.accessToken = undefined; // Reset for this drive
+            this.driveAuthConfig.expires = undefined;
+        } else {
+            this.driveAuthConfig = null; // Use global
+        }
+
         this.paths = [];
         this.files = [];
         this.passwords = [];
@@ -10237,11 +10264,12 @@ class googleDrive {
     }
 
     async init() {
-        await getAccessToken();
-        if (authConfig.user_drive_real_root_id) return;
-        const root_obj = await (gds[0] || this).findItemById('root');
+        const config = this.driveAuthConfig || this.authConfig;
+        await getAccessToken(config);
+        if (config.user_drive_real_root_id) return;
+        const root_obj = await this.findItemById('root');
         if (root_obj && root_obj.id) {
-            authConfig.user_drive_real_root_id = root_obj.id
+            config.user_drive_real_root_id = root_obj.id
         }
     }
 
@@ -10601,7 +10629,7 @@ class googleDrive {
     }
 
     async requestOptions(headers = {}, method = 'GET') {
-        const Token = await getAccessToken();
+        const Token = await getAccessToken(this.driveAuthConfig || this.authConfig);
         headers['authorization'] = 'Bearer ' + Token;
         return {
             'method': method,
