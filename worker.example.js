@@ -2004,6 +2004,105 @@ function html(current_drive_order = 0, model = {}) {
       color: var(--text-primary);
     }
 
+    /* Grid View Toggle */
+    .view-toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      justify-content: flex-end;
+    }
+
+    .view-toggle-btn {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      color: var(--text-secondary);
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .view-toggle-btn:hover,
+    .view-toggle-btn.active {
+      background: var(--hover-bg);
+      color: var(--text-primary);
+      border-color: var(--accent-main);
+    }
+
+    /* Grid View */
+    .list-group.grid-view {
+      display: grid !important;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+
+    .list-group.grid-view .list-group-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 1rem 0.75rem;
+      min-height: 200px;
+      justify-content: flex-start;
+      margin-bottom: 0;
+    }
+
+    .list-group.grid-view .list-group-item:hover {
+      transform: translateY(-4px) scale(1.02);
+    }
+
+    .list-group.grid-view .list-group-item .grid-thumb {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+      background: rgba(13, 31, 35, 0.5);
+    }
+
+    .list-group.grid-view .list-group-item .grid-icon-placeholder {
+      width: 100%;
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      margin-bottom: 0.75rem;
+      background: rgba(13, 31, 35, 0.3);
+      border-radius: 8px;
+    }
+
+    .list-group.grid-view .list-group-item .grid-filename {
+      font-size: 0.85rem;
+      font-weight: 500;
+      word-break: break-word;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      line-height: 1.3;
+      max-height: 2.6em;
+    }
+
+    .list-group.grid-view .list-group-item .grid-filesize {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    /* Hide original content in grid mode, show grid content */
+    .list-group.grid-view .list-group-item .grid-content { display: flex; flex-direction: column; align-items: center; width: 100%; }
+    .list-group.grid-view .list-group-item .list-content { display: none; }
+    .list-group:not(.grid-view) .list-group-item .grid-content { display: none; }
+    .list-group:not(.grid-view) .list-group-item .list-content { display: contents; }
+
     /* Responsive */
     @media (max-width: 768px) {
       body {
@@ -2043,6 +2142,20 @@ function html(current_drive_order = 0, model = {}) {
       .footer .float-end {
         float: none !important;
       }
+
+      .list-group.grid-view {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 0.75rem;
+      }
+
+      .list-group.grid-view .list-group-item {
+        min-height: 160px;
+      }
+
+      .list-group.grid-view .list-group-item .grid-thumb,
+      .list-group.grid-view .list-group-item .grid-icon-placeholder {
+        height: 90px;
+      }
     }
 
     @media (max-height: 600px) {
@@ -2062,6 +2175,33 @@ function html(current_drive_order = 0, model = {}) {
   window.current_drive_order = ${current_drive_order};
   window.UI = JSON.parse('${JSON.stringify(uiConfig)}');
   window.player_config = JSON.parse('${JSON.stringify(player_config)}');
+  window._gdi_file_thumbs = {};
+  window._gdi_file_mimes = {};
+  // Intercept fetch API to capture thumbnail URLs (app.min.js uses fetch, not jQuery AJAX)
+  (function() {
+    var _origFetch = window.fetch;
+    window.fetch = function(url, opts) {
+      return _origFetch.apply(this, arguments).then(function(response) {
+        var cloned = response.clone();
+        cloned.json().then(function(json) {
+          if (json && json.data && json.data.files) {
+            json.data.files.forEach(function(f) {
+              if (f.name && f.thumbnailLink) {
+                window._gdi_file_thumbs[f.name] = f.thumbnailLink;
+              }
+              if (f.name && f.mimeType) {
+                window._gdi_file_mimes[f.name] = f.mimeType;
+              }
+            });
+            if (typeof window._updateGridThumbnails === 'function') {
+              setTimeout(window._updateGridThumbnails, 100);
+            }
+          }
+        }).catch(function() {});
+        return response;
+      });
+    };
+  })();
   </script>
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.0.0/dist/${uiConfig.theme}/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
@@ -2512,6 +2652,262 @@ function html(current_drive_order = 0, model = {}) {
         }
       });
     });
+
+    // --- Grid View Toggle ---
+    (function initGridView() {
+        var currentView = localStorage.getItem('gdi_view_mode') || 'list';
+
+        function getFileIcon(mimeType, name) {
+            if (!mimeType) return 'bi-file-earmark';
+            if (mimeType === 'application/vnd.google-apps.folder') return 'bi-folder-fill';
+            if (mimeType.startsWith('image/')) return 'bi-file-earmark-image';
+            if (mimeType.startsWith('video/')) return 'bi-file-earmark-play';
+            if (mimeType.startsWith('audio/')) return 'bi-file-earmark-music';
+            if (mimeType === 'application/pdf') return 'bi-file-earmark-pdf';
+            var ext = (name || '').split('.').pop().toLowerCase();
+            if (['psd', 'ai', 'sketch', 'fig', 'xd'].indexOf(ext) >= 0) return 'bi-file-earmark-image';
+            if (['zip', 'rar', '7z', 'tar', 'gz'].indexOf(ext) >= 0) return 'bi-file-earmark-zip';
+            if (['doc', 'docx', 'txt', 'rtf', 'odt'].indexOf(ext) >= 0) return 'bi-file-earmark-text';
+            if (['xls', 'xlsx', 'csv', 'ods'].indexOf(ext) >= 0) return 'bi-file-earmark-spreadsheet';
+            if (['ppt', 'pptx', 'odp'].indexOf(ext) >= 0) return 'bi-file-earmark-slides';
+            if (['exe', 'msi', 'dmg', 'apk'].indexOf(ext) >= 0) return 'bi-file-earmark-binary';
+            return 'bi-file-earmark';
+        }
+
+        function isPreviewable(mimeType) {
+            if (!mimeType) return false;
+            return mimeType.startsWith('image/') || mimeType.startsWith('video/');
+        }
+
+        function injectToggle() {
+            var listGroup = document.querySelector('.list-group');
+            if (!listGroup || document.getElementById('view-toggle')) return;
+
+            var container = document.createElement('div');
+            container.className = 'view-toggle-container';
+            container.id = 'view-toggle';
+
+            var listBtn = document.createElement('button');
+            listBtn.className = 'view-toggle-btn' + (currentView === 'list' ? ' active' : '');
+            listBtn.innerHTML = '<i class="bi bi-list-ul"></i>';
+            listBtn.title = 'List View';
+            listBtn.onclick = function() { switchView('list'); };
+
+            var gridBtn = document.createElement('button');
+            gridBtn.className = 'view-toggle-btn' + (currentView === 'grid' ? ' active' : '');
+            gridBtn.innerHTML = '<i class="bi bi-grid-3x3-gap-fill"></i>';
+            gridBtn.title = 'Grid View';
+            gridBtn.onclick = function() { switchView('grid'); };
+
+            container.appendChild(listBtn);
+            container.appendChild(gridBtn);
+            listGroup.parentNode.insertBefore(container, listGroup);
+
+            augmentListItems();
+            if (currentView === 'grid') {
+                listGroup.classList.add('grid-view');
+            }
+        }
+
+        function getMimeType(name) {
+            var apiMime = window._gdi_file_mimes && window._gdi_file_mimes[name];
+            if (apiMime) return apiMime;
+            return '';
+        }
+
+        function createThumbImg(thumbUrl, name, mimeType) {
+            var img = document.createElement('img');
+            img.className = 'grid-thumb';
+            img.src = thumbUrl;
+            img.alt = name;
+            img.loading = 'lazy';
+            img.onerror = function() {
+                var ph = document.createElement('div');
+                ph.className = 'grid-icon-placeholder';
+                var ic = document.createElement('i');
+                ic.className = 'bi ' + getFileIcon(mimeType, name);
+                if (mimeType === 'application/vnd.google-apps.folder') ic.style.color = 'var(--folder-color)';
+                ph.appendChild(ic);
+                img.replaceWith(ph);
+            };
+            return img;
+        }
+
+        function augmentListItems() {
+            var listGroup = document.querySelector('.list-group');
+            if (!listGroup) return;
+
+            var items = listGroup.querySelectorAll('.list-group-item');
+            items.forEach(function(item) {
+                if (item.querySelector('.grid-content')) return;
+
+                var linkEl = item.querySelector('a');
+                var name = linkEl ? linkEl.textContent.trim() : item.textContent.trim();
+                var href = linkEl ? linkEl.getAttribute('href') : null;
+
+                var mimeType = getMimeType(name);
+                if (!mimeType) {
+                    var iconEl = item.querySelector('i[class*="bi-"]') || item.querySelector('svg');
+                    if (iconEl) {
+                        var cls = iconEl.className || '';
+                        if (cls.indexOf('bi-folder') >= 0) mimeType = 'application/vnd.google-apps.folder';
+                        else if (cls.indexOf('bi-file-earmark-image') >= 0) mimeType = 'image/';
+                        else if (cls.indexOf('bi-file-earmark-play') >= 0) mimeType = 'video/';
+                        else if (cls.indexOf('bi-file-earmark-music') >= 0) mimeType = 'audio/';
+                        else if (cls.indexOf('bi-file-earmark-pdf') >= 0) mimeType = 'application/pdf';
+                    }
+                }
+
+                var sizeEl = item.querySelector('.float-end, small, .text-muted');
+                var sizeText = sizeEl ? sizeEl.textContent.trim() : '';
+
+                var thumbUrl = window._gdi_file_thumbs && window._gdi_file_thumbs[name] || '';
+
+                var listContent = document.createElement('span');
+                listContent.className = 'list-content';
+                while (item.firstChild) {
+                    listContent.appendChild(item.firstChild);
+                }
+                item.appendChild(listContent);
+
+                var gridContent = document.createElement('div');
+                gridContent.className = 'grid-content';
+                gridContent.setAttribute('data-filename', name);
+
+                if (thumbUrl) {
+                    gridContent.appendChild(createThumbImg(thumbUrl, name, mimeType));
+                } else {
+                    var placeholder = document.createElement('div');
+                    placeholder.className = 'grid-icon-placeholder';
+                    var icon = document.createElement('i');
+                    icon.className = 'bi ' + getFileIcon(mimeType, name);
+                    if (mimeType === 'application/vnd.google-apps.folder') icon.style.color = 'var(--folder-color)';
+                    placeholder.appendChild(icon);
+                    gridContent.appendChild(placeholder);
+                }
+
+                var fnEl = document.createElement('div');
+                fnEl.className = 'grid-filename';
+                fnEl.textContent = name;
+                fnEl.title = name;
+                gridContent.appendChild(fnEl);
+
+                if (sizeText) {
+                    var szEl = document.createElement('div');
+                    szEl.className = 'grid-filesize';
+                    szEl.textContent = sizeText;
+                    gridContent.appendChild(szEl);
+                }
+
+                if (href) {
+                    var wrapper = document.createElement('a');
+                    wrapper.href = href;
+                    wrapper.style.textDecoration = 'none';
+                    wrapper.style.color = 'inherit';
+                    wrapper.appendChild(gridContent);
+                    item.appendChild(wrapper);
+                } else {
+                    item.appendChild(gridContent);
+                }
+            });
+        }
+
+        // Called by fetch interceptor after thumbnail data arrives
+        window._updateGridThumbnails = function() {
+            // Ensure items are augmented first (timing fix)
+            var listGroup = document.querySelector('.list-group');
+            if (listGroup) {
+                if (!document.getElementById('view-toggle')) {
+                    injectToggle();
+                } else {
+                    var unaugmented = listGroup.querySelectorAll('.list-group-item');
+                    var needsAugment = false;
+                    for (var i = 0; i < unaugmented.length; i++) {
+                        if (!unaugmented[i].querySelector('.grid-content')) { needsAugment = true; break; }
+                    }
+                    if (needsAugment) augmentListItems();
+                }
+            }
+            // Now update thumbnails on augmented items
+            var gridContents = document.querySelectorAll('.grid-content[data-filename]');
+            gridContents.forEach(function(gc) {
+                var name = gc.getAttribute('data-filename');
+                var thumbUrl = window._gdi_file_thumbs && window._gdi_file_thumbs[name];
+                if (!thumbUrl) return;
+                var placeholder = gc.querySelector('.grid-icon-placeholder');
+                if (!placeholder) return;
+                var mimeType = getMimeType(name);
+                placeholder.replaceWith(createThumbImg(thumbUrl, name, mimeType));
+            });
+        };
+
+        function switchView(mode) {
+            currentView = mode;
+            localStorage.setItem('gdi_view_mode', mode);
+            var listGroup = document.querySelector('.list-group');
+            if (!listGroup) return;
+
+            if (mode === 'grid') {
+                listGroup.classList.add('grid-view');
+            } else {
+                listGroup.classList.remove('grid-view');
+            }
+
+            document.querySelectorAll('.view-toggle-btn').forEach(function(btn) {
+                btn.classList.remove('active');
+            });
+            var btns = document.querySelectorAll('.view-toggle-btn');
+            if (mode === 'list' && btns[0]) btns[0].classList.add('active');
+            if (mode === 'grid' && btns[1]) btns[1].classList.add('active');
+        }
+
+        // Observe DOM for list-group being rendered by app.js
+        var observer = new MutationObserver(function(mutations) {
+            var listGroup = document.querySelector('.list-group');
+            if (listGroup && !document.getElementById('view-toggle')) {
+                injectToggle();
+            }
+            if (listGroup && document.getElementById('view-toggle')) {
+                var newItems = listGroup.querySelectorAll('.list-group-item:not(:has(.grid-content))');
+                if (newItems.length > 0) {
+                    augmentListItems();
+                }
+            }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Fallback: try to inject after short delays in case MutationObserver missed initial render
+        function tryInject() {
+            var lg = document.querySelector('.list-group');
+            if (lg && !document.getElementById('view-toggle')) {
+                injectToggle();
+            } else if (lg && document.getElementById('view-toggle')) {
+                var items = lg.querySelectorAll('.list-group-item');
+                var needsAugment = false;
+                for (var i = 0; i < items.length; i++) {
+                    if (!items[i].querySelector('.grid-content')) { needsAugment = true; break; }
+                }
+                if (needsAugment) augmentListItems();
+            }
+        }
+        setTimeout(tryInject, 500);
+        setTimeout(tryInject, 1500);
+        setTimeout(tryInject, 3000);
+    })();
+
+    // Fix Home link to point to site root instead of drive root
+    (function fixHomeLink() {
+        var mo = new MutationObserver(function() {
+            var navLinks = document.querySelectorAll('.nav-link');
+            navLinks.forEach(function(link) {
+                if (link.textContent.trim() === 'Home' && link.getAttribute('href') !== '/') {
+                    link.setAttribute('href', '/');
+                }
+            });
+        });
+        mo.observe(document.body, { childList: true, subtree: true });
+    })();
   </script>
 </body>
 </html>`;
@@ -6781,41 +7177,6 @@ const contact_html = `<!DOCTYPE html>
             50% { transform: translate(50px, -50px) scale(1.1); opacity: 0.8; }
         }
 
-        /* Snowfall Animation */
-        .snowfall-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            pointer-events: none;
-            overflow: hidden;
-        }
-
-        .snowflake {
-            position: absolute;
-            top: -20px;
-            color: #fff;
-            font-size: 1rem;
-            text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
-            opacity: 0.9;
-            animation: snowfall linear infinite;
-            will-change: transform;
-        }
-
-        .snowflake.small { font-size: 0.6rem; opacity: 0.6; }
-        .snowflake.medium { font-size: 1rem; opacity: 0.8; }
-        .snowflake.large { font-size: 1.4rem; opacity: 1; }
-
-        @keyframes snowfall {
-            0% { transform: translateY(-20px) rotate(0deg) translateX(0); }
-            25% { transform: translateY(25vh) rotate(90deg) translateX(15px); }
-            50% { transform: translateY(50vh) rotate(180deg) translateX(-15px); }
-            75% { transform: translateY(75vh) rotate(270deg) translateX(10px); }
-            100% { transform: translateY(105vh) rotate(360deg) translateX(-5px); }
-        }
-
         /* Navbar */
         .navbar {
             position: fixed;
@@ -7230,8 +7591,6 @@ const contact_html = `<!DOCTYPE html>
     </style>
 </head>
 <body>
-    <div class="snowfall-container" id="snowfall"></div>
-
     <nav class="navbar" id="navbar">
         <div class="navbar-content">
             <a href="/" class="logo-section">
@@ -7356,23 +7715,6 @@ const contact_html = `<!DOCTYPE html>
             const navbar = document.getElementById('navbar');
             navbar.classList.toggle('scrolled', window.scrollY > 50);
         });
-
-        // Snowfall effect
-        function createSnowfall() {
-            const container = document.getElementById('snowfall');
-            const snowflakes = ['❄', '❅', '❆', '✧', '✦'];
-            
-            for (let i = 0; i < 50; i++) {
-                const snowflake = document.createElement('div');
-                snowflake.className = 'snowflake ' + ['small', 'medium', 'large'][Math.floor(Math.random() * 3)];
-                snowflake.textContent = snowflakes[Math.floor(Math.random() * snowflakes.length)];
-                snowflake.style.left = Math.random() * 100 + '%';
-                snowflake.style.animationDuration = (Math.random() * 10 + 10) + 's';
-                snowflake.style.animationDelay = (Math.random() * 10) + 's';
-                container.appendChild(snowflake);
-            }
-        }
-        createSnowfall();
 
         // Form submission
         function handleSubmit(event) {
@@ -9081,7 +9423,7 @@ You can approve using the buttons below or via /admin.`;
         return new Response('', {
             status: 307,
             headers: {
-                'Location': `${url.origin}/0:/`
+                'Location': `${url.origin}/`
             }
         });
     }
@@ -10278,9 +10620,37 @@ class googleDrive {
         const types = DriveFixedTerms.gd_root_type;
         if (root_id === 'root' || root_id === authConfig.user_drive_real_root_id) {
             this.root_type = types.user_drive;
-        } else {
-            this.root_type = types.share_drive;
+            return;
         }
+        this.root_type = types.share_drive;
+
+        // Detect the actual shared drive ID for correct search scoping
+        const requestOption = await this.requestOptions();
+        try {
+            const fileRes = await fetch(
+                `https://www.googleapis.com/drive/v3/files/${root_id}?fields=driveId&supportsAllDrives=true`,
+                requestOption
+            );
+            if (fileRes.ok) {
+                const fileData = await fileRes.json();
+                if (fileData.driveId) {
+                    this.shared_drive_id = fileData.driveId;
+                    return;
+                }
+                return;
+            }
+        } catch(e) {}
+
+        // If files.get failed, root_id might be a shared drive ID itself
+        try {
+            const driveRes = await fetch(
+                `https://www.googleapis.com/drive/v3/drives/${root_id}`,
+                requestOption
+            );
+            if (driveRes.ok) {
+                this.shared_drive_id = root_id;
+            }
+        } catch(e) {}
     }
 
 
@@ -10362,7 +10732,7 @@ class googleDrive {
         };
         params.q = `'${parent}' in parents and trashed = false AND name !='.password' and mimeType != 'application/vnd.google-apps.shortcut' and mimeType != 'application/vnd.google-apps.document' and mimeType != 'application/vnd.google-apps.spreadsheet' and mimeType != 'application/vnd.google-apps.form' and mimeType != 'application/vnd.google-apps.site'`;
         params.orderBy = 'folder, name, modifiedTime desc';
-        params.fields = "nextPageToken, files(id, name, mimeType, size, modifiedTime, driveId, kind, fileExtension)";
+        params.fields = "nextPageToken, files(id, name, mimeType, size, modifiedTime, driveId, kind, fileExtension, thumbnailLink)";
         params.pageSize = this.authConfig.files_list_page_size;
 
         if (page_token) {
@@ -10446,7 +10816,7 @@ class googleDrive {
                 params.corpora = 'allDrives';
             } else {
                 params.corpora = 'drive';
-                params.driveId = this.root.id;
+                params.driveId = this.shared_drive_id || this.root.id;
             }
             params.includeItemsFromAllDrives = true;
             params.supportsAllDrives = true;
