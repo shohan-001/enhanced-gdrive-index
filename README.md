@@ -1,8 +1,15 @@
 # 🚀 Enhanced Google Drive Index
 
-A heavily modified and enhanced Google Drive Index based on [Parveen Bhadoo's GDI](https://gitlab.com/GoogleDriveIndex/Google-Drive-Index). Features a stunning dark glassmorphism UI, admin panel with user management, and KV-based activity logging.
+[![GitHub stars](https://img.shields.io/github/stars/shohan-001/enhanced-gdrive-index?style=social)](https://github.com/shohan-001/enhanced-gdrive-index/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/shohan-001/enhanced-gdrive-index?style=social)](https://github.com/shohan-001/enhanced-gdrive-index/network)
+[![GitHub issues](https://img.shields.io/github/issues/shohan-001/enhanced-gdrive-index)](https://github.com/shohan-001/enhanced-gdrive-index/issues)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Cloudflare Workers](https://img.shields.io/badge/Powered%20by-Cloudflare%20Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 
-<!-- ADD_SCREENSHOT: homepage -->
+A feature-rich Google Drive Index built on **Cloudflare Workers** with dark glassmorphism UI, grid view with thumbnail previews, admin panel, Telegram bot integration, and shared drive support. Based on [Parveen Bhadoo's GDI](https://gitlab.com/GoogleDriveIndex/Google-Drive-Index).
+
+🌐 **Live Demo:** [iswvoid.me](https://iswvoid.me)
+
 ![Homepage](screenshots/homepage.png)
 
 ---
@@ -12,7 +19,6 @@ A heavily modified and enhanced Google Drive Index based on [Parveen Bhadoo's GD
 ### 🔐 Authentication System
 Beautiful animated login page with wave effects and smooth transitions. Supports both light and dark themes with glassmorphism design.
 
-<!-- ADD_SCREENSHOT: login_page -->
 ![Login Page](screenshots/login_page.png)
 
 **Login Page Highlights:**
@@ -28,7 +34,6 @@ Beautiful animated login page with wave effects and smooth transitions. Supports
 ### 🛡️ Admin Panel
 Full-featured admin dashboard for managing users and monitoring activity.
 
-<!-- ADD_SCREENSHOT: admin_dashboard -->
 ![Admin Dashboard](screenshots/admin_dashboard.png)
 
 **Dashboard Features:**
@@ -37,7 +42,6 @@ Full-featured admin dashboard for managing users and monitoring activity.
 - 👥 Complete user management (approve, block, delete)
 - 🏷️ Role-based access control (admin/user)
 
-<!-- ADD_SCREENSHOT: admin_users -->
 ![User Management](screenshots/admin_users.png)
 
 ---
@@ -45,7 +49,6 @@ Full-featured admin dashboard for managing users and monitoring activity.
 ### 📋 Activity Logging
 Track all user activity with powerful log management tools.
 
-<!-- ADD_SCREENSHOT: admin_logs -->
 ![Activity Logs](screenshots/admin_logs.png)
 
 **Log Features:**
@@ -59,7 +62,6 @@ Track all user activity with powerful log management tools.
 ### 🎨 Dark Glassmorphism UI
 Custom dark teal color palette with modern design elements.
 
-<!-- ADD_SCREENSHOT: file_browser -->
 ![File Browser](screenshots/file_browser.png)
 
 **UI Highlights:**
@@ -90,7 +92,6 @@ Toggle between list and grid views. Grid view shows file thumbnail previews from
 ### 🎬 Media Player
 Built-in video and audio player with Plyr integration.
 
-<!-- ADD_SCREENSHOT: video_player -->
 ![Video Player](screenshots/video_player.png)
 
 ---
@@ -98,7 +99,6 @@ Built-in video and audio player with Plyr integration.
 ### 🔍 Global Search
 Search across all configured drives instantly.
 
-<!-- ADD_SCREENSHOT: search_results -->
 ![Search Results](screenshots/search_results.png)
 
 ---
@@ -245,6 +245,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Copy `worker.example.js` to `worker.js` and add your credentials
+4. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
+---
+
+## ⭐ Star History
+
+If you find this project useful, please consider giving it a star!
 
 ---
 
