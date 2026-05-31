@@ -68,6 +68,22 @@ Custom dark teal color palette with modern design elements.
 - 🔮 Glassmorphism cards with blur effects
 - 🎯 Smooth hover animations
 - 📁 Golden folder icons with glow effects
+- 🖼️ Grid/List view toggle with thumbnail previews
+
+---
+
+### 🖼️ Grid View with Thumbnails
+Toggle between list and grid views. Grid view shows file thumbnail previews from Google Drive, making it easy to browse image folders without opening each file.
+
+![Grid View](screenshots/grid_view.png)
+
+**Grid View Features:**
+- 📸 Real-time thumbnail previews from Google Drive API
+- 🔄 Toggle between grid and list views
+- 💾 View preference saved to localStorage
+- 📱 Responsive grid adapts to all screen sizes
+- 📁 Folder icons with golden glow in grid mode
+- 🖼️ Supports all file types with thumbnails (images, PDFs, docs, etc.)
 
 ---
 
@@ -199,13 +215,13 @@ Planned features for future releases:
 ### 🎨 UI/UX Enhancements
 - [ ] Light/Dark theme toggle
 - [ ] Custom color themes
-- [ ] Grid/List view toggle
+- [x] Grid/List view toggle with thumbnail previews
 - [ ] Keyboard shortcuts
 - [x] Drag & drop upload
 
 ### 🔧 Technical
 - [ ] Cloudflare R2 caching
-- [ ] Image/video thumbnails
+- [x] Image/video thumbnails via Google Drive API
 - [ ] More file type previews
 - [ ] REST API endpoints
 
